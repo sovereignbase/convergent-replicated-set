@@ -25,6 +25,7 @@ import type {
 
 export class CRSet<T> {
   declare private readonly state: CRSetState<T>
+  declare private readonly hashCache: WeakMap<Uint8Array, string>
   declare private readonly eventTarget: EventTarget
 
   /**
@@ -36,6 +37,12 @@ export class CRSet<T> {
     Object.defineProperties(this, {
       state: {
         value: __create<T>(snapshot),
+        enumerable: false,
+        configurable: false,
+        writable: false,
+      },
+      hashCache: {
+        value: new WeakMap(),
         enumerable: false,
         configurable: false,
         writable: false,
@@ -56,15 +63,7 @@ export class CRSet<T> {
     return this.state.values.size
   }
   add(value: T): void {
-    let bytes: Uint8Array<ArrayBuffer>
-    try {
-      bytes = encode(value, { sortKeys: true })
-    } catch {
-      throw new CRSetError('EXAMPLE_ERROR_CODE')
-    }
-
-    const digest = sha256(bytes)
-    const hash = Bytes.toBase64UrlString(digest)
+    const hash = this.valueToKey(value)
 
     if (__read(hash, this.state)) return
     let result
@@ -83,31 +82,11 @@ export class CRSet<T> {
   }
 
   has(value: T): boolean {
-    let bytes: Uint8Array<ArrayBuffer>
-    try {
-      bytes = encode(value, { sortKeys: true })
-    } catch {
-      throw new CRSetError('EXAMPLE_ERROR_CODE')
-    }
-
-    const digest = sha256(bytes)
-    const hash = Bytes.toBase64UrlString(digest)
-
-    return Boolean(__read(hash, this.state))
+    return Boolean(__read(this.valueToKey(value), this.state))
   }
 
   delete(value: T): void {
-    let bytes: Uint8Array<ArrayBuffer>
-    try {
-      bytes = encode(value, { sortKeys: true })
-    } catch {
-      throw new CRSetError('EXAMPLE_ERROR_CODE')
-    }
-
-    const digest = sha256(bytes)
-    const hash = Bytes.toBase64UrlString(digest)
-
-    const result = __delete(this.state, hash)
+    const result = __delete(this.state, this.valueToKey(value))
     if (!result) return
 
     this.eventTarget.dispatchEvent(
@@ -280,5 +259,21 @@ export class CRSet<T> {
     for (const value of this.values()) {
       callback.call(thisArg, value, this)
     }
+  }
+
+  private valueToKey(value: T): string {
+    let bytes: Uint8Array<ArrayBuffer>
+    try {
+      bytes = encode(value, { sortKeys: true })
+    } catch {
+      throw new CRSetError('EXAMPLE_ERROR_CODE')
+    }
+    let hash = this.hashCache.get(bytes)
+    if (!hash) {
+      const digest = sha256(bytes)
+      hash = Bytes.toBase64UrlString(digest)
+      this.hashCache.set(bytes, hash)
+    }
+    return hash
   }
 }
