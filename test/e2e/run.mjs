@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
-/** update to current package */
+
 const root = process.cwd()
 const tasks = [
   ['Node', resolve(root, 'test', 'e2e', 'runsInNode', 'run.mjs')],

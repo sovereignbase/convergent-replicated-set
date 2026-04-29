@@ -195,4 +195,3 @@ try {
 } finally {
   await stopWorker(child)
 }
-/** update to current package */

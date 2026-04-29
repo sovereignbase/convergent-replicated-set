@@ -5,7 +5,7 @@ import fg from 'fast-glob'
 
 const coverageDir = resolve(process.cwd(), '.c8')
 rmSync(coverageDir, { recursive: true, force: true })
-/** update to current package */
+
 const env = { ...process.env, NODE_V8_COVERAGE: coverageDir }
 
 function run(command, args, envOverride = env) {

@@ -1,5 +1,5 @@
 import * as api from '../../../dist/index.js'
-import { runBytecodecSuite } from '../shared/suite.mjs'
+import { runCRSetSuite } from '../shared/suite.mjs'
 
 export default {
   async fetch(request) {
@@ -7,7 +7,7 @@ export default {
       return new Response('Not found', { status: 404 })
 
     try {
-      const results = await runBytecodecSuite(api, {
+      const results = await runCRSetSuite(api, {
         label: 'cloudflare-workers esm',
         runtimeGlobals: globalThis,
       })
@@ -21,4 +21,3 @@ export default {
     }
   },
 }
-/** update to current package */

@@ -12,6 +12,7 @@ const mimeTypes = {
   '.json': 'application/json',
   '.map': 'application/json',
   '.css': 'text/css',
+  '.cjs': 'text/javascript',
 }
 
 function safeResolve(base, pathname) {
@@ -26,8 +27,13 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/') pathname = '/runsInBrowsers/index.html'
 
   let filePath
-  if (pathname.startsWith('/dist/')) filePath = safeResolve(root, pathname)
-  else filePath = safeResolve(testRoot, pathname)
+  if (pathname.startsWith('/dist/')) {
+    filePath = safeResolve(root, pathname)
+  } else if (pathname.startsWith('/node_modules/')) {
+    filePath = safeResolve(root, pathname)
+  } else {
+    filePath = safeResolve(testRoot, pathname)
+  }
 
   if (!filePath) {
     res.statusCode = 400
@@ -51,7 +57,7 @@ const server = http.createServer(async (req, res) => {
 
 const port = Number.parseInt(process.env.PORT || '4173', 10)
 server.listen(port, '127.0.0.1', () => {
-  console.log(`bytecodec test server running at http://127.0.0.1:${port}`)
+  console.log(`CRSet test server running at http://127.0.0.1:${port}`)
 })
 
 function shutdown() {

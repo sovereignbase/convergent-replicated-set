@@ -20,6 +20,7 @@ import type {
   CRSetSnapshot,
   CRSetAck,
   CRSetDelta,
+  CRSetChange,
   CRSetEventMap,
 } from '../.types/types.js'
 
@@ -83,17 +84,18 @@ export class CRSet<T> {
     const hash = this.valueToKey(value)
 
     if (this.state.values.has(hash)) return
-    let result
+    let result: { delta: CRSetDelta<T>; change: CRSetChange<T> }
     try {
-      result = __update(hash, value, this.state)
+      result = __update(hash, value, this.state) as {
+        delta: CRSetDelta<T>
+        change: CRSetChange<T>
+      }
     } catch {
       throw new CRSetError(
         'VALUE_NOT_CLONEABLE',
         "Failed to execute 'add' on 'CRSet': The value could not be cloned."
       )
     }
-    if (!result) return
-
     void this.eventTarget.dispatchEvent(
       new CustomEvent('delta', { detail: result.delta })
     )
