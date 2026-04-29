@@ -65,7 +65,7 @@ export class CRSet<T> {
   add(value: T): void {
     const hash = this.valueToKey(value)
 
-    if (__read(hash, this.state)) return
+    if (this.state.values.has(hash)) return
     let result
     try {
       result = __update(hash, value, this.state)
