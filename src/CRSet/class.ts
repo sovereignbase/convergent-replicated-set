@@ -20,7 +20,6 @@ import type {
   CRSetSnapshot,
   CRSetAck,
   CRSetDelta,
-  CRSetEventListenerFor,
   CRSetEventMap,
 } from '../.types/index.js'
 
@@ -73,17 +72,14 @@ export class CRSet<T> {
       result = __update(hash, value, this.state)
     } catch {}
     if (!result) return
-    const { delta, change } = result
-    if (delta) {
-      this.eventTarget.dispatchEvent(
-        new CustomEvent('delta', { detail: delta })
-      )
-    }
-    if (change) {
-      this.eventTarget.dispatchEvent(
-        new CustomEvent('change', { detail: change })
-      )
-    }
+
+    this.eventTarget.dispatchEvent(
+      new CustomEvent('delta', { detail: result.delta })
+    )
+
+    this.eventTarget.dispatchEvent(
+      new CustomEvent('change', { detail: result.change })
+    )
   }
 
   has(value: T): boolean {
@@ -113,17 +109,14 @@ export class CRSet<T> {
 
     const result = __delete(this.state, hash)
     if (!result) return
-    const { delta, change } = result
-    if (delta) {
-      this.eventTarget.dispatchEvent(
-        new CustomEvent('delta', { detail: delta })
-      )
-    }
-    if (change) {
-      this.eventTarget.dispatchEvent(
-        new CustomEvent('change', { detail: change })
-      )
-    }
+
+    this.eventTarget.dispatchEvent(
+      new CustomEvent('delta', { detail: result.delta })
+    )
+
+    this.eventTarget.dispatchEvent(
+      new CustomEvent('change', { detail: result.change })
+    )
   }
 
   /**
@@ -132,26 +125,14 @@ export class CRSet<T> {
   clear(): void {
     const result = __delete(this.state)
     if (!result) return
-    const { delta, change } = result
-    if (delta) {
-      this.eventTarget.dispatchEvent(
-        new CustomEvent('delta', { detail: delta })
-      )
-    }
-    if (change) {
-      this.eventTarget.dispatchEvent(
-        new CustomEvent('change', { detail: change })
-      )
-    }
-  }
 
-  /**
-   * Returns the current live keys.
-   *
-   * @returns The current keys in map iteration order.
-   */
-  keys(): Array<string> {
-    return Array.from(this.state.values.keys())
+    this.eventTarget.dispatchEvent(
+      new CustomEvent('delta', { detail: result.delta })
+    )
+
+    this.eventTarget.dispatchEvent(
+      new CustomEvent('change', { detail: result.change })
+    )
   }
 
   /**
@@ -163,18 +144,6 @@ export class CRSet<T> {
     return Array.from(this.state.values.values(), (entry) =>
       structuredClone(entry.value.value)
     )
-  }
-
-  /**
-   * Returns detached key-value entries for the current live projection.
-   *
-   * @returns The current entries in map iteration order.
-   */
-  entries(): Array<[T, T]> {
-    return Array.from(this.state.values.values(), (entry) => [
-      structuredClone(entry.value.value),
-      structuredClone(entry.value.value),
-    ])
   }
 
   /**
@@ -307,12 +276,9 @@ export class CRSet<T> {
    * @param callback - Function to call for each key-value entry.
    * @param thisArg - Optional `this` value for the callback.
    */
-  forEach(
-    callback: (value1: T, value2: T, map: this) => void,
-    thisArg?: unknown
-  ): void {
+  forEach(callback: (value: T, set: this) => void, thisArg?: unknown): void {
     for (const value of this.values()) {
-      callback.call(thisArg, value, value, this)
+      callback.call(thisArg, value, this)
     }
   }
 }
