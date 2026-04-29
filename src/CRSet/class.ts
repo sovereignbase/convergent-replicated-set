@@ -23,9 +23,19 @@ import type {
   CRSetEventMap,
 } from '../.types/index.js'
 
+/**
+ * A convergent replicated set for content-addressed values.
+ *
+ * Values are stored in a CRMap under a SHA-256 Base64URL key derived from their
+ * canonical MessagePack encoding. Local mutations emit `delta` and `change`
+ * events; received deltas converge through {@link merge}.
+ *
+ * Reads and iteration return detached copies of the live values.
+ *
+ * @typeParam T - The value type stored in the set.
+ */
 export class CRSet<T> {
   declare private readonly state: CRSetState<T>
-  declare private readonly hashCache: Map<T, string>
   declare private readonly eventTarget: EventTarget
 
   /**
@@ -41,12 +51,6 @@ export class CRSet<T> {
         configurable: false,
         writable: false,
       },
-      hashCache: {
-        value: new Map(),
-        enumerable: false,
-        configurable: false,
-        writable: false,
-      },
       eventTarget: {
         value: new EventTarget(),
         enumerable: false,
@@ -57,11 +61,23 @@ export class CRSet<T> {
   }
 
   /**
-   * The current number of live keys.
+   * The current number of live values.
    */
   get size(): number {
     return this.state.values.size
   }
+
+  /**
+   * Adds a value to the replicated set.
+   *
+   * If the value's content key is already visible, the operation is a no-op.
+   * Successful additions emit `delta` and `change` events.
+   *
+   * @param value - Value to add.
+   * @throws {CRSetError} Thrown when the value cannot be encoded.
+   * @throws {CRSetError} Thrown when the value cannot be cloned into replica
+   * state.
+   */
   add(value: T): void {
     const hash = this.valueToKey(value)
 
@@ -69,7 +85,12 @@ export class CRSet<T> {
     let result
     try {
       result = __update(hash, value, this.state)
-    } catch {}
+    } catch {
+      throw new CRSetError(
+        'VALUE_NOT_CLONEABLE',
+        "Failed to execute 'add' on 'CRSet': The value could not be cloned."
+      )
+    }
     if (!result) return
 
     void this.eventTarget.dispatchEvent(
@@ -81,10 +102,26 @@ export class CRSet<T> {
     )
   }
 
+  /**
+   * Checks whether a value is currently visible in the replicated set.
+   *
+   * @param value - Value to check.
+   * @returns `true` when the value's content key is visible.
+   * @throws {CRSetError} Thrown when the value cannot be encoded.
+   */
   has(value: T): boolean {
     return this.state.values.has(this.valueToKey(value))
   }
 
+  /**
+   * Deletes a value from the replicated set.
+   *
+   * If the value's content key is not visible, the operation is a no-op.
+   * Successful deletions emit `delta` and `change` events.
+   *
+   * @param value - Value to delete.
+   * @throws {CRSetError} Thrown when the value cannot be encoded.
+   */
   delete(value: T): void {
     const result = __delete(this.state, this.valueToKey(value))
     if (!result) return
@@ -101,7 +138,9 @@ export class CRSet<T> {
   }
 
   /**
-   * Deletes every visible key.
+   * Deletes every visible value.
+   *
+   * Successful clears emit `delta` and `change` events.
    */
   clear(): void {
     const result = __delete(this.state)
@@ -121,7 +160,7 @@ export class CRSet<T> {
   /**
    * Returns detached copies of the current live values.
    *
-   * @returns The current values in map iteration order.
+   * @returns The current values in replica iteration order.
    */
   values(): Array<T> {
     return Array.from(this.state.values.values(), (entry) =>
@@ -132,7 +171,10 @@ export class CRSet<T> {
   /**
    * Applies a remote or local delta to the replica state.
    *
-   * @param delta - The partial serialized map state to merge.
+   * Accepted remote changes may emit `change`; dominated incoming state may
+   * emit a reply `delta`.
+   *
+   * @param delta - The partial serialized set state to merge.
    */
   merge(delta: CRSetDelta<T>): void {
     const result = __merge<T>(delta, this.state)
@@ -155,6 +197,9 @@ export class CRSet<T> {
 
   /**
    * Emits the current acknowledgement frontier.
+   *
+   * Acknowledgement frontiers are used by peers to decide when tombstones can
+   * be garbage collected.
    */
   acknowledge(): void {
     const ack = __acknowledge<T>(this.state)
@@ -172,7 +217,7 @@ export class CRSet<T> {
   }
 
   /**
-   * Emits the current serializable map snapshot.
+   * Emits the current serializable set snapshot.
    */
   snapshot(): void {
     const snapshot = __snapshot<T>(this.state)
@@ -212,7 +257,7 @@ export class CRSet<T> {
   }
 
   /**
-   * Returns a serializable snapshot representation of this map.
+   * Returns a serializable snapshot representation of this set.
    *
    * Called automatically by `JSON.stringify`.
    */
@@ -221,7 +266,7 @@ export class CRSet<T> {
   }
 
   /**
-   * Attempts to return this map as a JSON string.
+   * Attempts to return this set as a JSON string.
    */
   toString(): string {
     return JSON.stringify(this)
@@ -242,7 +287,7 @@ export class CRSet<T> {
   }
 
   /**
-   * Iterates over detached copies of the current live entries.
+   * Iterates over detached copies of the current live values.
    */
   *[Symbol.iterator](): IterableIterator<T> {
     for (const entry of this.state.values.values()) {
@@ -251,12 +296,12 @@ export class CRSet<T> {
   }
 
   /**
-   * Calls a function once for each live entry copy in map iteration order.
+   * Calls a function once for each live value copy in replica iteration order.
    *
    * Callback values are detached copies, so mutating them does not mutate the
    * replica.
    *
-   * @param callback - Function to call for each key-value entry.
+   * @param callback - Function to call for each value.
    * @param thisArg - Optional `this` value for the callback.
    */
   forEach(callback: (value: T, set: this) => void, thisArg?: unknown): void {
@@ -266,19 +311,15 @@ export class CRSet<T> {
   }
 
   private valueToKey(value: T): string {
-    let hash = this.hashCache.get(value)
-    if (!hash) {
-      let bytes: Uint8Array<ArrayBuffer>
-      try {
-        bytes = encode(value, { sortKeys: true })
-      } catch {
-        throw new CRSetError('EXAMPLE_ERROR_CODE')
-      }
-
-      const digest = sha256(bytes)
-      hash = Bytes.toBase64UrlString(digest)
-      void this.hashCache.set(value, hash)
+    let bytes: Uint8Array<ArrayBuffer>
+    try {
+      bytes = encode(value, { sortKeys: true })
+    } catch {
+      throw new CRSetError(
+        'VALUE_NOT_ENCODABLE',
+        "Failed to encode 'CRSet' value: The value could not be encoded as canonical MessagePack."
+      )
     }
-    return hash
+    return Bytes.toBase64UrlString(sha256(bytes))
   }
 }
