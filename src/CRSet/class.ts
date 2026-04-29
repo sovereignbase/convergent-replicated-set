@@ -82,13 +82,14 @@ export class CRSet<T> {
   }
 
   has(value: T): boolean {
-    return Boolean(__read(this.valueToKey(value), this.state))
+    return this.state.values.has(this.valueToKey(value))
   }
 
   delete(value: T): void {
-    void this.hashCache.delete(value)
     const result = __delete(this.state, this.valueToKey(value))
     if (!result) return
+
+    void this.hashCache.delete(value)
 
     void this.eventTarget.dispatchEvent(
       new CustomEvent('delta', { detail: result.delta })
@@ -103,9 +104,10 @@ export class CRSet<T> {
    * Deletes every visible key.
    */
   clear(): void {
-    void this.hashCache.clear()
     const result = __delete(this.state)
     if (!result) return
+
+    void this.hashCache.clear()
 
     void this.eventTarget.dispatchEvent(
       new CustomEvent('delta', { detail: result.delta })
