@@ -126,8 +126,6 @@ export class CRSet<T> {
     const result = __delete(this.state, this.valueToKey(value))
     if (!result) return
 
-    void this.hashCache.delete(value)
-
     void this.eventTarget.dispatchEvent(
       new CustomEvent('delta', { detail: result.delta })
     )
@@ -145,8 +143,6 @@ export class CRSet<T> {
   clear(): void {
     const result = __delete(this.state)
     if (!result) return
-
-    void this.hashCache.clear()
 
     void this.eventTarget.dispatchEvent(
       new CustomEvent('delta', { detail: result.delta })
