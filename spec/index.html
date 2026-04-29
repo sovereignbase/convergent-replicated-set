@@ -1,9 +1,75 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Package Name</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Convergent Replicated Set (CR-Set)</title>
     <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="Specification and reference JavaScript binding for a convergent replicated set delta CRDT with content-addressed values, SHA-256 value identities, CR-Map replication, tombstone acknowledgements, and garbage collection."
+    />
+    <meta
+      name="keywords"
+      content="cr-set, convergent replicated set, crdt, content-addressed, sha-256, messagepack, base64url, delta, snapshot, acknowledgement, garbage collection, javascript, typescript"
+    />
+    <meta name="author" content="Jori Lehtinen" />
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+    />
+    <meta name="application-name" content="convergent-replicated-set" />
+    <link
+      rel="canonical"
+      href="https://sovereignbase.dev/convergent-replicated-set/"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      href="https://sovereignbase.dev/sovereignbase_logo.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="https://sovereignbase.dev/sovereignbase_logo.png"
+    />
+    <meta property="og:type" content="article" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:site_name" content="Sovereignbase" />
+    <meta property="og:title" content="Convergent Replicated Set (CR-Set)" />
+    <meta
+      property="og:description"
+      content="Specification and reference JavaScript binding for a convergent replicated set delta CRDT with content-addressed values, SHA-256 value identities, CR-Map replication, tombstone acknowledgements, and garbage collection."
+    />
+    <meta
+      property="og:url"
+      content="https://sovereignbase.dev/convergent-replicated-set/"
+    />
+    <meta
+      property="og:image"
+      content="https://sovereignbase.dev/sovereignbase_social_sharing_image.png"
+    />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Sovereignbase social sharing image for the CR-Set specification."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Convergent Replicated Set (CR-Set)" />
+    <meta
+      name="twitter:description"
+      content="Specification and reference JavaScript binding for a convergent replicated set delta CRDT with content-addressed values, SHA-256 value identities, CR-Map replication, tombstone acknowledgements, and garbage collection."
+    />
+    <meta
+      name="twitter:image"
+      content="https://sovereignbase.dev/sovereignbase_social_sharing_image.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="Sovereignbase social sharing image for the CR-Set specification."
+    />
+    <meta name="twitter:creator" content="@jortsupetterson" />
     <script
       src="https://www.w3.org/Tools/respec/respec-w3c"
       class="remove"
@@ -12,79 +78,1067 @@
     <script class="remove">
       var respecConfig = {
         specStatus: 'unofficial',
+        shortName: 'convergent-replicated-set',
+        github: 'sovereignbase/convergent-replicated-set',
         latestVersion: null,
         edDraftURI: null,
         editors: [
           { name: 'Jori Lehtinen', url: 'https://github.com/jortsupetterson' },
           {
             name: 'GPT-5.4',
-            url: 'https://openai.com/fi-FI/index/introducing-gpt-5-4/',
+            url: 'https://openai.com/en-US/index/introducing-gpt-5-4/',
           },
         ],
-        github: 'sovereignbase/package-name',
-        shortName: 'pn',
         xref: 'web-platform',
-        group: 'none',
         lint: {
           'informative-dfn': true,
           'local-refs-exist': true,
           'no-unused-dfns': true,
         },
+        localBiblio: {
+          CRMAP: {
+            title: 'Convergent Replicated Map (CR-Map)',
+            href: 'https://sovereignbase.dev/convergent-replicated-map/',
+            publisher: 'Sovereignbase',
+          },
+          ECMA262: {
+            title: 'ECMAScript Language Specification',
+            href: 'https://tc39.es/ecma262/',
+            publisher: 'Ecma International',
+          },
+          DOM: {
+            title: 'DOM Standard',
+            href: 'https://dom.spec.whatwg.org/',
+            publisher: 'WHATWG',
+          },
+          INFRA: {
+            title: 'Infra',
+            href: 'https://infra.spec.whatwg.org/',
+            publisher: 'WHATWG',
+          },
+          HTML: {
+            title: 'Safe passing of structured data',
+            href: 'https://html.spec.whatwg.org/multipage/structured-data.html',
+            publisher: 'WHATWG',
+          },
+          MESSAGEPACK: {
+            title: 'MessagePack specification',
+            href: 'https://github.com/msgpack/msgpack/blob/master/spec.md',
+            publisher: 'MessagePack',
+          },
+          RFC4648: {
+            title: 'The Base16, Base32, and Base64 Data Encodings',
+            href: 'https://www.rfc-editor.org/rfc/rfc4648',
+            publisher: 'IETF',
+            date: '2006-10',
+          },
+          RFC4634: {
+            title:
+              'US Secure Hash Algorithms (SHA and HMAC-SHA): SHA-1, SHA-224, SHA-256, SHA-384, and SHA-512',
+            href: 'https://www.rfc-editor.org/rfc/rfc4634',
+            publisher: 'IETF',
+            date: '2006-07',
+          },
+          FIPS1804: {
+            title: 'Secure Hash Standard (SHS), FIPS PUB 180-4',
+            href: 'https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf',
+            publisher: 'NIST',
+            date: '2015-08',
+          },
+          RFC9562: {
+            title: 'Universally Unique IDentifiers (UUIDs)',
+            href: 'https://www.rfc-editor.org/rfc/rfc9562',
+            publisher: 'IETF',
+            date: '2024-05',
+          },
+          MARTIN_KLEPPMANN: {
+            title: 'CRDTs: The Hard Parts',
+            href: 'https://martin.kleppmann.com/2020/07/06/crdt-hard-parts-hydra.html',
+            publisher: 'Martin Kleppmann',
+            date: '2020-06',
+          },
+        },
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://sovereignbase.dev/convergent-replicated-set/#organization",
+            "name": "Sovereignbase",
+            "url": "https://github.com/sovereignbase",
+            "alternateName": ["@sovereignbase"],
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://sovereignbase.dev/sovereignbase_logo.png",
+              "width": 320,
+              "height": 320
+            },
+            "sameAs": [
+              "https://github.com/sovereignbase",
+              "https://jsr.io/@sovereignbase",
+              "https://www.npmjs.com/org/sovereignbase"
+            ]
+          },
+          {
+            "@type": "Person",
+            "@id": "https://sovereignbase.dev/convergent-replicated-set/#author",
+            "name": "Jori Lehtinen",
+            "url": "https://github.com/jortsupetterson",
+            "alternateName": ["jortsupetterson", "@jortsupetterson"],
+            "sameAs": [
+              "https://github.com/jortsupetterson",
+              "https://www.npmjs.com/~jortsupetterson",
+              "https://jsr.io/user/ab186a13-a64f-429e-a757-927aa4fa6e6c",
+              "https://linkedin.com/in/jortsupetterson",
+              "https://x.com/jortsupetterson",
+              "https://www.youtube.com/@jortsupetterson"
+            ]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://sovereignbase.dev/convergent-replicated-set/#website",
+            "url": "https://sovereignbase.dev/convergent-replicated-set/",
+            "name": "convergent-replicated-set",
+            "inLanguage": "en",
+            "publisher": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#organization"
+            }
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "@id": "https://sovereignbase.dev/convergent-replicated-set/#software",
+            "name": "@sovereignbase/convergent-replicated-set",
+            "alternateName": ["convergent-replicated-set", "cr-set"],
+            "url": "https://sovereignbase.dev/convergent-replicated-set/",
+            "description": "Convergent replicated set delta CRDT with content-addressed values, SHA-256 value identities, CR-Map replication, tombstone acknowledgements, and garbage collection.",
+            "codeRepository": "https://github.com/sovereignbase/convergent-replicated-set",
+            "license": "https://www.apache.org/licenses/LICENSE-2.0",
+            "programmingLanguage": ["TypeScript", "JavaScript"],
+            "runtimePlatform": [
+              "Node.js",
+              "Web Browser",
+              "Bun",
+              "Deno",
+              "Cloudflare Workers",
+              "Edge Runtime"
+            ],
+            "keywords": [
+              "sha-256",
+              "content-addressed",
+              "messagepack",
+              "base64url",
+              "convergent",
+              "replicated",
+              "delta",
+              "crdt",
+              "convergent-replicated-set",
+              "cr-set",
+              "set",
+              "gossip",
+              "local-first"
+            ],
+            "image": "https://sovereignbase.dev/sovereignbase_social_sharing_image.png",
+            "isAccessibleForFree": true,
+            "author": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#author"
+            },
+            "maintainer": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#organization"
+            },
+            "publisher": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#organization"
+            },
+            "sameAs": [
+              "https://jsr.io/@sovereignbase/convergent-replicated-set/",
+              "https://www.npmjs.com/package/@sovereignbase/convergent-replicated-set"
+            ]
+          },
+          {
+            "@type": "TechArticle",
+            "@id": "https://sovereignbase.dev/convergent-replicated-set/#specification",
+            "headline": "Convergent Replicated Set (CR-Set)",
+            "name": "Convergent Replicated Set (CR-Set)",
+            "url": "https://sovereignbase.dev/convergent-replicated-set/",
+            "description": "Specification and reference JavaScript binding for a convergent replicated set delta CRDT with content-addressed values, SHA-256 value identities, CR-Map replication, tombstone acknowledgements, and garbage collection.",
+            "inLanguage": "en",
+            "isPartOf": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#website"
+            },
+            "mainEntityOfPage": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#webpage"
+            },
+            "about": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#software"
+            },
+            "author": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#author"
+            },
+            "publisher": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#organization"
+            },
+            "image": {
+              "@type": "ImageObject",
+              "url": "https://sovereignbase.dev/sovereignbase_social_sharing_image.png",
+              "width": 1200,
+              "height": 630
+            }
+          },
+          {
+            "@type": "WebPage",
+            "@id": "https://sovereignbase.dev/convergent-replicated-set/#webpage",
+            "url": "https://sovereignbase.dev/convergent-replicated-set/",
+            "name": "Convergent Replicated Set (CR-Set)",
+            "description": "Specification and reference JavaScript binding for a convergent replicated set delta CRDT with content-addressed values, SHA-256 value identities, CR-Map replication, tombstone acknowledgements, and garbage collection.",
+            "inLanguage": "en",
+            "isPartOf": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#website"
+            },
+            "about": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#software"
+            },
+            "author": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#author"
+            },
+            "publisher": {
+              "@id": "https://sovereignbase.dev/convergent-replicated-set/#organization"
+            },
+            "primaryImageOfPage": {
+              "@type": "ImageObject",
+              "url": "https://sovereignbase.dev/sovereignbase_social_sharing_image.png",
+              "width": 1200,
+              "height": 630
+            },
+            "relatedLink": [
+              "https://github.com/sovereignbase",
+              "https://jsr.io/@sovereignbase",
+              "https://www.npmjs.com/org/sovereignbase",
+              "https://github.com/sovereignbase/convergent-replicated-set",
+              "https://jsr.io/@sovereignbase/convergent-replicated-set/",
+              "https://www.npmjs.com/package/@sovereignbase/convergent-replicated-set",
+              "https://github.com/jortsupetterson",
+              "https://www.npmjs.com/~jortsupetterson",
+              "https://jsr.io/user/ab186a13-a64f-429e-a757-927aa4fa6e6c",
+              "https://linkedin.com/in/jortsupetterson",
+              "https://x.com/jortsupetterson",
+              "https://www.youtube.com/@jortsupetterson"
+            ]
+          }
+        ]
       }
     </script>
   </head>
   <body>
     <section id="abstract">
-      <p>This is required.</p>
-    </section>
-    <section id="sotd">
-      <p>This is required.</p>
-    </section>
-    <section class="informative">
-      <h2>Introduction</h2>
-      <p>Some informative introductory text.</p>
-      <aside class="note" title="A useful note">
-        <p>I'm a note!</p>
-      </aside>
-    </section>
-    <section>
-      <h2>A section</h2>
-      <aside class="example">
-        <p>This is an example.</p>
-        <pre class="js">
-        // Automatic syntax highlighting
-        function someJavaScript(){}
-        </pre>
-      </aside>
-      <section>
-        <h3>I'm a sub-section</h3>
-        <p class="issue" data-number="121">
-          <!-- Issue can automatically be populated from GitHub -->
-        </p>
-      </section>
-    </section>
-    <section data-dfn-for="Foo">
-      <h2>Start your spec!</h2>
-      <pre class="idl">
-        [Exposed=Window]
-        interface Foo {
-        attribute DOMString bar;
-        undefined doTheFoo();
-        };
-      </pre>
-      <p>The <dfn>Foo</dfn> interface represents a {{Foo}}.</p>
       <p>
-        The <dfn>doTheFoo()</dfn> method does the foo. Call it by running
-        {{Foo/doTheFoo()}}.
+        This document defines Convergent Replicated Set (CR-Set), a delta CRDT
+        for a membership collection whose logical value is a list without
+        duplicates. Each value is identified by a content key derived from its
+        deterministic MessagePack bytes, SHA-256 digest, and unpadded Base64URL
+        digest string.
       </p>
-      <ol class="algorithm">
-        <li>A |variable:DOMString| can be declared like this.</li>
-      </ol>
+      <p>
+        The specification defines the content-addressing rules, snapshot and
+        delta shapes, merge and garbage-collection behavior inherited from
+        CR-Map, and one conforming JavaScript binding.
+      </p>
     </section>
+
+    <section id="sotd">
+      <p>
+        CR-Set is designed to serve as a replicated membership primitive for
+        local-first and intermittently connected systems. It treats equal
+        encoded content as the same logical set member, regardless of which
+        replica first observed that value.
+      </p>
+      <p>
+        This specification is maintained alongside a reference implementation.
+      </p>
+
+      <p>To use the reference implementation see:</p>
+      <ul>
+        <li>
+          <a
+            href="https://www.npmjs.com/package/@sovereignbase/convergent-replicated-set"
+            >NPM Registry</a
+          >
+        </li>
+        <li>
+          <a href="https://jsr.io/@sovereignbase/convergent-replicated-set"
+            >JSR Registry</a
+          >
+        </li>
+      </ul>
+
+      <p>Inspired by [[MARTIN_KLEPPMANN]].</p>
+    </section>
+
     <section id="conformance">
       <p>
-        This is required for specifications that contain normative material.
+        Unless otherwise stated, data-structure and algorithm terms such as
+        <em>list</em>, <em>set</em>, <em>map</em>, <em>record</em>,
+        <em>parameters</em>, <em>variables</em>, and <em>iterate</em> are used
+        with the meanings defined by Infra [[INFRA]].
       </p>
+      <p>
+        A conforming implementation MUST preserve the content-key identity
+        rules, visible membership convergence, reply-delta behavior, and
+        tombstone-safety constraints defined by this specification and by its
+        CR-Map substrate [[CRMAP]].
+      </p>
+    </section>
+
+    <section>
+      <h2>Terminology</h2>
+      <p>
+        A <dfn>CR-Set replica</dfn> is one independently mutable instance of the
+        data structure.
+      </p>
+      <p>
+        A <dfn>set value</dfn> is a consumer-defined payload that can be encoded
+        into deterministic MessagePack bytes and copied with structured clone.
+      </p>
+      <p>
+        A <dfn>value byte sequence</dfn> is the byte sequence produced by the
+        value encoding algorithm defined in this specification. The encoding is
+        based on MessagePack [[MESSAGEPACK]].
+      </p>
+      <p>
+        A <dfn>content digest</dfn> is the SHA-256 digest of a
+        <a>value byte sequence</a>, computed as defined by RFC 4634 [[RFC4634]]
+        and FIPS 180-4 [[FIPS1804]].
+      </p>
+      <p>
+        A <dfn>content key</dfn> is the unpadded Base64URL string form of a
+        <a>content digest</a>, using the URL and filename safe alphabet defined
+        by RFC 4648 [[RFC4648]].
+      </p>
+      <p>
+        A <dfn>set value list</dfn> is the consumer-facing collection returned
+        by reads and iteration. It contains at most one visible
+        <a>set value</a> for each <a>content key</a>.
+      </p>
+      <p>
+        A <dfn>UUIDv7 identifier</dfn> is an identifier that is a valid UUID
+        version 7 as defined by [[RFC9562]].
+      </p>
+      <p>
+        The underlying CR-Map key used to store one set member is always a
+        <a>content key</a>.
+      </p>
+      <p>
+        A <dfn>state entry</dfn> is the underlying CR-Map state entry for one
+        <a>content key</a>, consisting of a <code>uuidv7</code>,
+        <code>value.key</code>, <code>value.value</code>, and
+        <code>predecessor</code>.
+      </p>
+      <p>
+        A <dfn>tombstone entry</dfn> is a retained
+        <a>UUIDv7 identifier</a> representing a replaced, deleted, or otherwise
+        dominated underlying CR-Map write.
+      </p>
+      <p>
+        A <dfn>live projection</dfn> is the set of currently visible
+        <a>state entry</a>(s), keyed by <a>content key</a>.
+      </p>
+      <p>
+        A <dfn>snapshot</dfn> is the full structured-clone-compatible serialized
+        state of a <a>CR-Set replica</a>.
+      </p>
+      <p>
+        A <dfn>delta</dfn> is a partial <a>snapshot</a> containing only the
+        values or tombstones a replica wishes to share.
+      </p>
+      <p>
+        An <dfn>acknowledgement frontier</dfn> is the largest retained
+        <a>tombstone entry</a> of one replica under lexicographic comparison.
+      </p>
+      <p>
+        A <dfn>reply delta</dfn> is a <a>delta</a> emitted by merge when local
+        state already dominates an incoming contender and the replica chooses to
+        return its current local state.
+      </p>
+    </section>
+
+    <section id="core-model">
+      <h2>Core Model</h2>
+      <p>
+        A <a>CR-Set replica</a> is a content-addressed projection over CR-Map
+        [[CRMAP]]. The underlying CR-Map key is not supplied by callers. It is
+        derived from the current content of the <a>set value</a>.
+      </p>
+      <p>
+        The logical membership target is a <a>set value list</a>: a collection
+        that behaves as a list of visible values without duplicate content keys.
+        The order exposed by collection views is an implementation projection
+        over the current CR-Map state. Convergence is defined over membership by
+        <a>content key</a>, not over a separate user-visible ordering relation.
+      </p>
+      <p>
+        Adding a value computes its <a>content key</a>. If that key is already
+        visible, the operation is a no-op. Otherwise the replica writes the
+        value into the underlying CR-Map under that key. Deleting a value
+        computes the same key and removes that one visible map entry when it
+        exists. Clearing removes every visible map entry.
+      </p>
+      <p>
+        Snapshot, delta, merge, acknowledgement, reply-delta, and
+        garbage-collection semantics are inherited from CR-Map. Incoming data is
+        tolerant: malformed top-level values, invalid UUIDv7 identifiers,
+        invalid tombstones, non-string keys, and non-cloneable payloads are
+        ignored by the underlying merge and hydration algorithms rather than
+        becoming visible state.
+      </p>
+      <p>
+        A SHA-256 collision causes two different encoded values to share one
+        <a>content key</a>. CR-Set treats such values as the same logical
+        member, because the content key is the identity boundary of the data
+        structure.
+      </p>
+    </section>
+
+    <section>
+      <h2>Data Structure</h2>
+      <p>
+        The same logical replica can be viewed through three useful
+        representations: the detached snapshot used for transport and storage,
+        the underlying CR-Map runtime projection, and the consumer-facing
+        duplicate-free value list.
+      </p>
+
+      <section>
+        <h3>Snapshot</h3>
+        <pre class="json">
+{
+  "values": [
+    {
+      "uuidv7": "019b4f64-3a52-7000-8000-000000000001",
+      "value": {
+        "key": "h4tE2gk7qfP0QhF3vOVH1q2T7bPBmDOs5wv0ZrC9uQM",
+        "value": { "id": "alpha", "active": true }
+      },
+      "predecessor": "019b4f64-3a52-7000-8000-000000000000"
+    }
+  ],
+  "tombstones": ["019b4f64-3a52-7000-8000-000000000000"]
+}
+        </pre>
+      </section>
+
+      <section>
+        <h3>Runtime</h3>
+        <pre class="js">
+{
+  values: Map&lt;ContentKey, StateEntry&gt;,
+  relations: Map&lt;UUIDv7, ContentKey&gt;,
+  tombstones: Set&lt;UUIDv7&gt;,
+  predecessors: Set&lt;UUIDv7&gt;
+}
+        </pre>
+      </section>
+
+      <section>
+        <h3>Consumer</h3>
+        <pre class="json">
+[
+  { "id": "alpha", "active": true },
+  { "id": "beta", "active": false }
+]
+        </pre>
+      </section>
+    </section>
+
+    <section>
+      <h2>Core Algorithms</h2>
+
+      <section>
+        <h3 id="derive-content-key">Derive Content Key</h3>
+        <ol class="algorithm">
+          <li>Let <var>value</var> be the supplied <a>set value</a>.</li>
+          <li>
+            Attempt to encode <var>value</var> as MessagePack with deterministic
+            map-key sorting enabled. If encoding fails, then fail with
+            <code>VALUE_NOT_ENCODABLE</code>.
+          </li>
+          <li>
+            Let <var>bytes</var> be the resulting <a>value byte sequence</a>.
+          </li>
+          <li>
+            Let <var>digest</var> be SHA-256(<var>bytes</var>) [[RFC4634]]
+            [[FIPS1804]].
+          </li>
+          <li>
+            Let <var>key</var> be the unpadded Base64URL encoding of
+            <var>digest</var> [[RFC4648]].
+          </li>
+          <li>Return <var>key</var>.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h3>Create</h3>
+        <ol class="algorithm">
+          <li>
+            Let <var>replica</var> be a new underlying CR-Map replica hydrated
+            from the supplied optional <a>snapshot</a> according to CR-Map's
+            create algorithm [[CRMAP]].
+          </li>
+          <li>
+            Ignore snapshot entries that the CR-Map create algorithm rejects.
+          </li>
+          <li>Return <var>replica</var> as a <a>CR-Set replica</a>.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h3>Read</h3>
+        <ol class="algorithm">
+          <li>
+            To test membership for <var>value</var>, run
+            <a href="#derive-content-key">derive content key</a> with
+            <var>value</var>.
+          </li>
+          <li>
+            Return true if the underlying <a>live projection</a> contains that
+            <a>content key</a>; otherwise return false.
+          </li>
+          <li>
+            To enumerate values, iterate the underlying visible CR-Map state and
+            return detached structured clones of each stored
+            <code>value.value</code>.
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h3>Update</h3>
+        <ol class="algorithm">
+          <li>
+            Run <a href="#derive-content-key">derive content key</a> with the
+            supplied value.
+          </li>
+          <li>
+            If the derived <a>content key</a> is already visible in the
+            underlying <a>live projection</a>, then return no change.
+          </li>
+          <li>
+            Run CR-Map's local update algorithm with the derived
+            <a>content key</a> as key and the supplied value as payload
+            [[CRMAP]].
+          </li>
+          <li>
+            If the underlying update cannot structured-clone the value, then
+            fail with <code>VALUE_NOT_CLONEABLE</code>.
+          </li>
+          <li>
+            Return the CR-Map update result as a CR-Set <a>delta</a> and
+            membership change.
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h3>Delete</h3>
+        <ol class="algorithm">
+          <li>
+            Run <a href="#derive-content-key">derive content key</a> with the
+            supplied value.
+          </li>
+          <li>
+            If the derived <a>content key</a> is not visible in the underlying
+            <a>live projection</a>, then return no change.
+          </li>
+          <li>
+            Run CR-Map's keyed delete algorithm with the derived
+            <a>content key</a> [[CRMAP]].
+          </li>
+          <li>Return the resulting tombstone-only <a>delta</a> and change.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h3>Clear</h3>
+        <ol class="algorithm">
+          <li>
+            If the underlying <a>live projection</a> is empty, then return no
+            change.
+          </li>
+          <li>Run CR-Map's clear algorithm [[CRMAP]].</li>
+          <li>
+            Return the resulting tombstone-only <a>delta</a> and membership
+            change.
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h3>Merge</h3>
+        <ol class="algorithm">
+          <li>
+            If the supplied candidate is not a record, then return no change.
+          </li>
+          <li>
+            Run CR-Map's merge algorithm over the underlying replica state
+            [[CRMAP]].
+          </li>
+          <li>
+            Incoming value entries whose <code>value.key</code> is not a string
+            or whose <code>value.value</code> cannot be structured-cloned are
+            ignored by the
+            <a href="#transform-a-snapshot-value-entry-to-a-state-entry"
+              >transform a snapshot value entry to a state entry</a
+            >
+            algorithm.
+          </li>
+          <li>
+            If merge accepts remote values or tombstones, return the visible
+            membership change. If local state dominates incoming contenders,
+            return any <a>reply delta</a>.
+          </li>
+          <li>
+            A conforming implementation MAY dispatch a reply <a>delta</a>, a
+            visible <a>change event</a>, or both, matching the CR-Map merge
+            result.
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h3>Acknowledge</h3>
+        <ol class="algorithm">
+          <li>
+            Compute the underlying CR-Map acknowledgement frontier [[CRMAP]].
+          </li>
+          <li>
+            Return the largest retained valid <a>tombstone entry</a>, or the
+            empty string when no valid tombstone exists.
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h3>Garbage Collect</h3>
+        <ol class="algorithm">
+          <li>
+            If the supplied list of acknowledgement frontiers is not a list or
+            is empty, then return.
+          </li>
+          <li>
+            Run CR-Map's garbage-collection algorithm with the supplied
+            frontiers [[CRMAP]].
+          </li>
+          <li>
+            Remove only tombstones at or below the smallest valid supplied
+            frontier, while preserving identifiers still referenced as live
+            predecessors by the underlying CR-Map state.
+          </li>
+        </ol>
+        <p class="note">
+          This algorithm is only safe when the caller supplies acknowledgement
+          frontiers covering every replica whose future convergence must still
+          be preserved. Supplying only a partial frontier set is caller misuse
+          and does not guarantee that an offline replica can later catch up from
+          deltas alone.
+        </p>
+      </section>
+
+      <section>
+        <h3>Snapshot</h3>
+        <ol class="algorithm">
+          <li>
+            Run CR-Map's snapshot algorithm over the underlying replica state
+            [[CRMAP]].
+          </li>
+          <li>
+            Return a new <a>snapshot</a> containing all visible value entries
+            produced by the
+            <a href="#transform-a-state-entry-to-a-snapshot-value-entry"
+              >transform a state entry to a snapshot value entry</a
+            >
+            algorithm and all retained tombstones.
+          </li>
+        </ol>
+      </section>
+    </section>
+
+    <section>
+      <h2>Reference JavaScript Binding</h2>
+      <p>
+        This section defines one conforming JavaScript binding for the model
+        above. The binding is a collection interface over the replicated
+        content-key model. It intentionally does not adopt every ECMAScript
+        <code>Set</code> behavior [[ECMA262]].
+      </p>
+
+      <section>
+        <h3>API Summary</h3>
+        <pre class="idl">
+callback CRSetForEachCallback = undefined (any value, CRSet set);
+
+[Exposed=*]
+interface CRSet {
+  constructor(optional object snapshot = {});
+  readonly attribute unsigned long size;
+  undefined add(any value);
+  boolean has(any value);
+  undefined delete(any value);
+  undefined clear();
+  sequence&lt;any&gt; values();
+  undefined merge(optional object delta = {});
+  undefined acknowledge();
+  undefined garbageCollect(sequence&lt;DOMString&gt; frontiers);
+  undefined snapshot();
+  undefined addEventListener(
+    DOMString type,
+    EventListener? listener,
+    optional (AddEventListenerOptions or boolean) options = {}
+  );
+  undefined removeEventListener(
+    DOMString type,
+    EventListener? listener,
+    optional (EventListenerOptions or boolean) options = {}
+  );
+  undefined forEach(CRSetForEachCallback callback, optional any thisArg);
+  object toJSON();
+  stringifier DOMString ();
+  iterable&lt;any&gt;;
+};
+
+dictionary CRSetSnapshotValuePayload {
+  required DOMString key;
+  required any value;
+};
+
+dictionary CRSetSnapshotValueEntry {
+  required DOMString uuidv7;
+  required CRSetSnapshotValuePayload value;
+  required DOMString predecessor;
+};
+
+dictionary CRSetSnapshot {
+  required sequence&lt;CRSetSnapshotValueEntry&gt; values;
+  required sequence&lt;DOMString&gt; tombstones;
+};
+
+dictionary CRSetDelta {
+  sequence&lt;CRSetSnapshotValueEntry&gt; values;
+  sequence&lt;DOMString&gt; tombstones;
+};
+
+typedef record&lt;DOMString, any&gt; CRSetChange;
+typedef DOMString CRSetAck;
+        </pre>
+        <p>
+          The constructor and <a data-link-for="CRSet">merge()</a> method are
+          typed as taking generic objects in the coarse Web IDL summary above so
+          that the IDL matches the permissive JavaScript ingress behavior. The
+          expected object shapes are <code>CRSetSnapshot</code> and
+          <code>CRSetDelta</code> as defined earlier.
+        </p>
+        <p>
+          The <code>key</code> member exposed in snapshot entries is the derived
+          <a>content key</a>, not a caller-provided property. The
+          <code>value</code> member holds the original set member payload.
+        </p>
+        <p>
+          <code>size</code> returns the current number of visible content keys.
+          <a data-link-for="CRSet">values()</a>,
+          <a data-link-for="CRSet">forEach()</a>, and <code>for...of</code>
+          expose detached structured clones rather than mutable references into
+          replica state.
+        </p>
+        <p>
+          When the current <a>snapshot</a> is JSON-compatible,
+          <code>JSON.stringify(set)</code> serializes the binding through that
+          snapshot. <code>toString()</code> attempts to return the JSON string
+          form of the current snapshot.
+        </p>
+      </section>
+
+      <section>
+        <h3>Errors</h3>
+        <p>
+          The JavaScript binding throws <code>CRSetError</code> with a string
+          <code>code</code> attribute for local API misuse.
+        </p>
+        <dl>
+          <dt><code>VALUE_NOT_ENCODABLE</code></dt>
+          <dd>
+            Thrown when <a data-link-for="CRSet">add()</a>,
+            <a data-link-for="CRSet">has()</a>, or
+            <a data-link-for="CRSet">delete()</a> receives a value that cannot
+            be encoded as deterministic MessagePack for content-key derivation.
+          </dd>
+          <dt><code>VALUE_NOT_CLONEABLE</code></dt>
+          <dd>
+            Thrown when <a data-link-for="CRSet">add()</a> receives a value that
+            can be content-keyed but cannot be copied into replica state with
+            structured clone.
+          </dd>
+        </dl>
+      </section>
+
+      <section>
+        <h3>Events</h3>
+        <p>
+          The JavaScript binding maintains an internal
+          <code>EventTarget</code> object as defined by DOM [[DOM]].
+        </p>
+        <p>
+          The binding forwards
+          <a data-link-for="CRSet">addEventListener()</a> and
+          <a data-link-for="CRSet">removeEventListener()</a> to that internal
+          event target. Local mutations, merges, acknowledgement emission, and
+          snapshot emission dispatch synthetic events through the same target.
+        </p>
+        <p>
+          The JavaScript binding defines four synthetic event types. Each is a
+          <code>CustomEvent</code> object whose <code>detail</code> attribute is
+          initialized as described below [[DOM]].
+        </p>
+        <dl>
+          <dt><dfn>delta event</dfn></dt>
+          <dd>
+            A <code>CustomEvent</code> whose <code>detail</code> is a
+            <a>delta</a>. The binding dispatches this event for local writes and
+            deletes, and for merges that emit a non-empty <a>reply delta</a>.
+          </dd>
+          <dt><dfn>change event</dfn></dt>
+          <dd>
+            A <code>CustomEvent</code> whose <code>detail</code> is a sparse
+            visible membership patch mapping changed <a>content key</a>(s) to
+            their new visible values, with deleted keys mapped to
+            <code>undefined</code>.
+          </dd>
+          <dt><dfn>ack event</dfn></dt>
+          <dd>
+            A <code>CustomEvent</code> whose <code>detail</code> is the current
+            <a>acknowledgement frontier</a> produced when
+            <a data-link-for="CRSet">acknowledge()</a> observes at least one
+            retained valid tombstone.
+          </dd>
+          <dt><dfn>snapshot event</dfn></dt>
+          <dd>
+            A <code>CustomEvent</code> whose <code>detail</code> is the full
+            current <a>snapshot</a> produced when
+            <a data-link-for="CRSet">snapshot()</a> is invoked.
+          </dd>
+        </dl>
+        <p>
+          <a data-link-for="CRSet">add()</a>,
+          <a data-link-for="CRSet">delete()</a>, and
+          <a data-link-for="CRSet">clear()</a> MUST dispatch
+          <a>delta event</a> before <a>change event</a> when the operation
+          changes membership. <a data-link-for="CRSet">merge()</a> MAY dispatch
+          a <a>delta event</a>, a <a>change event</a>, or both, and when both
+          are dispatched the <a>delta event</a> MUST be dispatched first.
+          <a data-link-for="CRSet">acknowledge()</a> MUST dispatch an
+          <a>ack event</a> only when the computed frontier is non-empty, and
+          <a data-link-for="CRSet">snapshot()</a> MUST dispatch a
+          <a>snapshot event</a>.
+        </p>
+      </section>
+
+      <section>
+        <h3>Auxiliary Algorithms</h3>
+
+        <section>
+          <h4 id="transform-a-snapshot-value-entry-to-a-state-entry">
+            Transform a Snapshot Value Entry to a State Entry
+          </h4>
+          <ol class="algorithm">
+            <li>If the candidate is not a record, then return failure.</li>
+            <li>
+              If the candidate does not have its own <code>value</code> member,
+              then return failure.
+            </li>
+            <li>
+              If the candidate <code>uuidv7</code> is not a valid
+              <a>UUIDv7 identifier</a>, then return failure.
+            </li>
+            <li>
+              If the candidate <code>predecessor</code> is not a valid
+              <a>UUIDv7 identifier</a>, then return failure.
+            </li>
+            <li>
+              If the candidate <code>value</code> member is not a record, then
+              return failure.
+            </li>
+            <li>
+              If the candidate <code>value.key</code> is not a non-empty string,
+              then return failure.
+            </li>
+            <li>
+              Attempt to detach the candidate <code>value.value</code> payload
+              with <code>structuredClone</code> [[HTML]]. If cloning fails, then
+              return failure.
+            </li>
+            <li>
+              Return a new <a>state entry</a> populated from the candidate
+              fields.
+            </li>
+          </ol>
+        </section>
+
+        <section>
+          <h4 id="transform-a-state-entry-to-a-snapshot-value-entry">
+            Transform a State Entry to a Snapshot Value Entry
+          </h4>
+          <p>
+            Return a new structured-clone-compatible object whose
+            <code>uuidv7</code>, <code>value.key</code>,
+            <code>value.value</code>, and <code>predecessor</code> members equal
+            the current <a>state entry</a> after detaching the payload with
+            <code>structuredClone</code> [[HTML]].
+          </p>
+        </section>
+      </section>
+
+      <section>
+        <h3>Methods</h3>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">Constructor</dfn></h5>
+          <p>
+            Construct a new binding whose internal state is the result of the
+            core create algorithm applied to the optional <a>snapshot</a>.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">size</dfn></h5>
+          <p>
+            Return the current number of visible content keys in the
+            <a>live projection</a>.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">add()</dfn></h5>
+          <p>
+            Run the content-key derivation algorithm for the supplied value. If
+            the key is absent, write the value into the underlying CR-Map state,
+            then dispatch the resulting <a>delta event</a> and
+            <a>change event</a>. If the key is already visible, return without
+            dispatching events.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">has()</dfn></h5>
+          <p>
+            Return true when the supplied value's derived
+            <a>content key</a> is presently visible in the
+            <a>live projection</a>.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">delete()</dfn></h5>
+          <p>
+            Run the content-key derivation algorithm for the supplied value,
+            delete that visible member when present, and dispatch the resulting
+            <a>delta event</a> and <a>change event</a>. If the key is absent,
+            return without dispatching events.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">clear()</dfn></h5>
+          <p>
+            Delete every visible member from the replica and dispatch the
+            resulting <a>delta event</a> and <a>change event</a> when the set
+            was non-empty.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">values()</dfn></h5>
+          <p>
+            Return detached copies of the current visible
+            <a>set value</a>(s).
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">merge()</dfn></h5>
+          <p>
+            Merge the supplied <a>delta</a> into the internal replica and
+            dispatch any resulting <a>delta event</a> or <a>change event</a>.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">acknowledge()</dfn></h5>
+          <p>
+            Compute the current <a>acknowledgement frontier</a> and dispatch an
+            <a>ack event</a> when that frontier is non-empty.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">garbageCollect()</dfn></h5>
+          <p>
+            Run the core garbage-collection algorithm with the supplied list of
+            acknowledgement frontiers.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">snapshot()</dfn></h5>
+          <p>
+            Create the current full <a>snapshot</a> and dispatch a
+            <a>snapshot event</a>. The method returns <code>undefined</code>.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">@@iterator</dfn></h5>
+          <p>
+            Iterate detached copies of the current visible
+            <a>set value</a>(s).
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">forEach()</dfn></h5>
+          <p>
+            Call the supplied callback once for each detached visible
+            <a>set value</a>, passing value and the set object.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">toJSON()</dfn></h5>
+          <p>
+            Return the same detached structured-clone-compatible shape as
+            <a>snapshot</a>. This is the value used by
+            <code>JSON.stringify</code>.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5><dfn class="export">toString()</dfn></h5>
+          <p>
+            Attempt to return the JSON string form of the current
+            <a>snapshot</a>.
+          </p>
+        </section>
+
+        <section data-dfn-for="CRSet">
+          <h5>
+            <dfn class="export">addEventListener()</dfn> and
+            <dfn class="export">removeEventListener()</dfn>
+          </h5>
+          <p>
+            Forward listener registration and listener removal to the binding's
+            internal <code>EventTarget</code> object using the provided type,
+            listener, and options values.
+          </p>
+        </section>
+      </section>
     </section>
   </body>
 </html>
