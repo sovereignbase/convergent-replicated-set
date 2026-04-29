@@ -25,7 +25,7 @@ import type {
 
 export class CRSet<T> {
   declare private readonly state: CRSetState<T>
-  declare private readonly hashCache: WeakMap<Uint8Array, string>
+  declare private readonly hashCache: Map<T, string>
   declare private readonly eventTarget: EventTarget
 
   /**
@@ -42,7 +42,7 @@ export class CRSet<T> {
         writable: false,
       },
       hashCache: {
-        value: new WeakMap(),
+        value: new Map(),
         enumerable: false,
         configurable: false,
         writable: false,
@@ -72,11 +72,11 @@ export class CRSet<T> {
     } catch {}
     if (!result) return
 
-    this.eventTarget.dispatchEvent(
+    void this.eventTarget.dispatchEvent(
       new CustomEvent('delta', { detail: result.delta })
     )
 
-    this.eventTarget.dispatchEvent(
+    void this.eventTarget.dispatchEvent(
       new CustomEvent('change', { detail: result.change })
     )
   }
@@ -86,14 +86,15 @@ export class CRSet<T> {
   }
 
   delete(value: T): void {
+    void this.hashCache.delete(value)
     const result = __delete(this.state, this.valueToKey(value))
     if (!result) return
 
-    this.eventTarget.dispatchEvent(
+    void this.eventTarget.dispatchEvent(
       new CustomEvent('delta', { detail: result.delta })
     )
 
-    this.eventTarget.dispatchEvent(
+    void this.eventTarget.dispatchEvent(
       new CustomEvent('change', { detail: result.change })
     )
   }
@@ -102,14 +103,15 @@ export class CRSet<T> {
    * Deletes every visible key.
    */
   clear(): void {
+    void this.hashCache.clear()
     const result = __delete(this.state)
     if (!result) return
 
-    this.eventTarget.dispatchEvent(
+    void this.eventTarget.dispatchEvent(
       new CustomEvent('delta', { detail: result.delta })
     )
 
-    this.eventTarget.dispatchEvent(
+    void this.eventTarget.dispatchEvent(
       new CustomEvent('change', { detail: result.change })
     )
   }
@@ -189,7 +191,7 @@ export class CRSet<T> {
     listener: EventListenerOrEventListenerObject | null,
     options?: boolean | AddEventListenerOptions
   ): void {
-    this.eventTarget.addEventListener(type, listener, options)
+    void this.eventTarget.addEventListener(type, listener, options)
   }
 
   /**
@@ -204,7 +206,7 @@ export class CRSet<T> {
     listener: EventListenerOrEventListenerObject | null,
     options?: boolean | EventListenerOptions
   ): void {
-    this.eventTarget.removeEventListener(type, listener, options)
+    void this.eventTarget.removeEventListener(type, listener, options)
   }
 
   /**
@@ -262,17 +264,18 @@ export class CRSet<T> {
   }
 
   private valueToKey(value: T): string {
-    let bytes: Uint8Array<ArrayBuffer>
-    try {
-      bytes = encode(value, { sortKeys: true })
-    } catch {
-      throw new CRSetError('EXAMPLE_ERROR_CODE')
-    }
-    let hash = this.hashCache.get(bytes)
+    let hash = this.hashCache.get(value)
     if (!hash) {
+      let bytes: Uint8Array<ArrayBuffer>
+      try {
+        bytes = encode(value, { sortKeys: true })
+      } catch {
+        throw new CRSetError('EXAMPLE_ERROR_CODE')
+      }
+
       const digest = sha256(bytes)
       hash = Bytes.toBase64UrlString(digest)
-      this.hashCache.set(bytes, hash)
+      void this.hashCache.set(value, hash)
     }
     return hash
   }
