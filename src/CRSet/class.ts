@@ -21,14 +21,14 @@ import type {
   CRSetAck,
   CRSetDelta,
   CRSetEventMap,
-} from '../.types/index.js'
+} from '../.types/types.js'
 
 /**
- * A convergent replicated set for content-addressed values.
+ * A convergent replicated set. (set = list without duplicates)
  *
- * Values are stored in a CRMap under a SHA-256 Base64URL key derived from their
- * canonical MessagePack encoding. Local mutations emit `delta` and `change`
- * events; received deltas converge through {@link merge}.
+ * Values are identified by the SHA-256 Base64URL digest of their canonical
+ * MessagePack encoding. Local mutations emit `delta` and `change` events;
+ * received deltas converge through {@link merge}.
  *
  * Reads and iteration return detached copies of the live values.
  *
@@ -39,7 +39,7 @@ export class CRSet<T> {
   declare private readonly eventTarget: EventTarget
 
   /**
-   * Creates a replicated set from an optional serializable snapshot.
+   * Creates a convergent replicated set from an optional serializable snapshot.
    *
    * @param snapshot - A previously emitted CRSet snapshot.
    */
@@ -70,7 +70,8 @@ export class CRSet<T> {
   /**
    * Adds a value to the replicated set.
    *
-   * If the value's content key is already visible, the operation is a no-op.
+   * The value's content key is derived from its current canonical MessagePack
+   * encoding. If that key is already visible, the operation is a no-op.
    * Successful additions emit `delta` and `change` events.
    *
    * @param value - Value to add.
@@ -106,7 +107,7 @@ export class CRSet<T> {
    * Checks whether a value is currently visible in the replicated set.
    *
    * @param value - Value to check.
-   * @returns `true` when the value's content key is visible.
+   * @returns `true` when the value's current content key is visible.
    * @throws {CRSetError} Thrown when the value cannot be encoded.
    */
   has(value: T): boolean {
@@ -116,8 +117,9 @@ export class CRSet<T> {
   /**
    * Deletes a value from the replicated set.
    *
-   * If the value's content key is not visible, the operation is a no-op.
-   * Successful deletions emit `delta` and `change` events.
+   * The value's content key is derived from its current canonical MessagePack
+   * encoding. If that key is not visible, the operation is a no-op. Successful
+   * deletions emit `delta` and `change` events.
    *
    * @param value - Value to delete.
    * @throws {CRSetError} Thrown when the value cannot be encoded.
@@ -306,6 +308,14 @@ export class CRSet<T> {
     }
   }
 
+  /**
+   * Derives the CRMap key for a set value.
+   *
+   * @param value - Value to encode.
+   * @returns The Base64URL-encoded SHA-256 digest of the canonical MessagePack
+   * bytes.
+   * @throws {CRSetError} Thrown when the value cannot be encoded.
+   */
   private valueToKey(value: T): string {
     let bytes: Uint8Array<ArrayBuffer>
     try {

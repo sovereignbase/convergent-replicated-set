@@ -1,7 +1,7 @@
 {
   "type": "module",
   "license": "Apache-2.0",
-  "name": "@sovereignbase/package-name",
+  "name": "@sovereignbase/convergent-replicated-set",
   "version": "0.0.0",
   "description": "",
   "keywords": [
@@ -67,12 +67,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sovereignbase/package-name.git"
+    "url": "git+https://github.com/sovereignbase/convergent-replicated-set.git"
   },
   "bugs": {
-    "url": "https://github.com/sovereignbase/package-name/issues"
+    "url": "https://github.com/sovereignbase/convergent-replicated-set/issues"
   },
-  "homepage": "https://sovereignbase.dev/package-name",
+  "homepage": "https://sovereignbase.dev/convergent-replicated-set",
   "dependencies": {
     "@msgpack/msgpack": "^3.1.3",
     "@noble/hashes": "^2.2.0",
