@@ -170,9 +170,9 @@ export class CRSet<T> {
    *
    * @returns The current entries in map iteration order.
    */
-  entries(): Array<[string, T]> {
+  entries(): Array<[T, T]> {
     return Array.from(this.state.values.values(), (entry) => [
-      entry.value.key,
+      structuredClone(entry.value.value),
       structuredClone(entry.value.value),
     ])
   }
@@ -308,11 +308,11 @@ export class CRSet<T> {
    * @param thisArg - Optional `this` value for the callback.
    */
   forEach(
-    callback: (value: T, key: string, map: this) => void,
+    callback: (value1: T, value2: T, map: this) => void,
     thisArg?: unknown
   ): void {
-    for (const [key, value] of this.entries()) {
-      callback.call(thisArg, value, key, this)
+    for (const value of this.values()) {
+      callback.call(thisArg, value, value, this)
     }
   }
 }
