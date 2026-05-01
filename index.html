@@ -5,6 +5,71 @@
     <meta name="color-scheme" content="dark" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Convergent Replicated Set (CR-Set) Demo</title>
+    <meta
+      name="description"
+      content="Interactive browser demo for @sovereignbase/convergent-replicated-set showing shape membership, deduplication, animated gossip, and convergence."
+    />
+    <meta
+      name="keywords"
+      content="cr-set, crdt, convergent replicated set, sovereignbase, gossip, local-first, typescript"
+    />
+    <meta name="author" content="Jori Lehtinen" />
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+    />
+    <meta name="application-name" content="convergent-replicated-set" />
+    <link
+      rel="canonical"
+      href="https://sovereignbase.dev/convergent-replicated-set/"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      href="https://sovereignbase.dev/sovereignbase_logo.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="https://sovereignbase.dev/sovereignbase_logo.png"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:site_name" content="Sovereignbase" />
+    <meta property="og:title" content="Convergent Replicated Set Demo" />
+    <meta
+      property="og:description"
+      content="Drag shapes into isolated CR-Set replicas, remove local members, merge snapshots, and watch the replicas converge."
+    />
+    <meta
+      property="og:url"
+      content="https://sovereignbase.dev/convergent-replicated-set/"
+    />
+    <meta
+      property="og:image"
+      content="https://sovereignbase.dev/sovereignbase_social_sharing_image.png"
+    />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Sovereignbase social sharing image for the CR-Set browser demo."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Convergent Replicated Set Demo" />
+    <meta
+      name="twitter:description"
+      content="Interactive CR-Set replica convergence demo."
+    />
+    <meta
+      name="twitter:image"
+      content="https://sovereignbase.dev/sovereignbase_social_sharing_image.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="Sovereignbase social sharing image for the CR-Set browser demo."
+    />
+    <meta name="twitter:creator" content="@jortsupetterson" />
     <style>
       :root {
         color-scheme: dark;
@@ -30,6 +95,10 @@
         color: #fff;
       }
 
+      button {
+        font: inherit;
+      }
+
       main {
         width: min(100%, 42rem);
         margin: 0 auto;
@@ -46,108 +115,16 @@
         box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.45);
       }
 
-      h1 {
-        margin: 0;
-        font-size: clamp(2rem, 8vw, 3.4rem);
-        line-height: 0.95;
-      }
-
-      .lede {
-        margin: 0;
-        color: rgba(255, 255, 255, 0.76);
-        line-height: 1.6;
-      }
-
-      .controls {
-        display: grid;
-        gap: 1rem;
-      }
-
-      label {
-        display: grid;
-        gap: 0.55rem;
-        font-size: 0.95rem;
+      .links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
       }
 
       input,
       button,
       a {
         border-radius: 999px;
-      }
-
-      input {
-        width: 100%;
-        padding: 0.9rem 1rem;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        background: #050505;
-        color: #fff;
-        font: inherit;
-      }
-
-      input::placeholder {
-        color: rgba(255, 255, 255, 0.38);
-      }
-
-      .actions {
-        display: grid;
-        gap: 0.75rem;
-      }
-
-      button {
-        width: 100%;
-        padding: 0.95rem 1rem;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        background: #fff;
-        color: #000;
-        font: inherit;
-        font-weight: 700;
-        cursor: pointer;
-      }
-
-      button.secondary {
-        background: transparent;
-        color: #fff;
-      }
-
-      button:disabled {
-        opacity: 0.55;
-        cursor: progress;
-      }
-
-      .status {
-        margin: 0;
-        min-height: 1.5rem;
-        color: rgba(255, 255, 255, 0.7);
-      }
-
-      .result {
-        display: grid;
-        gap: 0.5rem;
-        padding: 1rem;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 1rem;
-        background: rgba(255, 255, 255, 0.03);
-      }
-
-      .result-label {
-        font-size: 0.78rem;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.6);
-      }
-
-      output {
-        display: block;
-        overflow-wrap: anywhere;
-        font-family: 'IBM Plex Mono', 'Cascadia Code', monospace;
-        font-size: 0.95rem;
-        line-height: 1.5;
-      }
-
-      .links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
       }
 
       .links a {
@@ -168,7 +145,205 @@
         flex: 0 0 1rem;
       }
 
-      @media (min-width: 40rem) {
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 8vw, 3.4rem);
+        line-height: 0.95;
+      }
+
+      .lede {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.76);
+        line-height: 1.6;
+      }
+
+      .demo {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .actions {
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      .action {
+        width: 100%;
+        padding: 0.95rem 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: #fff;
+        color: #000;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .action:disabled {
+        opacity: 0.5;
+        cursor: progress;
+      }
+
+      .status-row {
+        display: grid;
+        gap: 0.5rem;
+        color: rgba(255, 255, 255, 0.76);
+        line-height: 1.4;
+      }
+
+      .status {
+        color: #fff;
+      }
+
+      .palette,
+      .replicas,
+      .remove-target {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .palette {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        min-height: 4.5rem;
+        padding: 0.75rem;
+      }
+
+      .item-tile {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 3rem;
+        min-height: 2.65rem;
+        padding: 0.65rem 0.8rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: #050505;
+        color: #fff;
+        cursor: grab;
+        user-select: none;
+      }
+
+      .item-tile:active {
+        cursor: grabbing;
+      }
+
+      .shape {
+        width: 1rem;
+        height: 1rem;
+        flex: 0 0 1rem;
+        border: 1px solid #fff;
+        background: rgba(255, 255, 255, 0.12);
+        pointer-events: none;
+      }
+
+      .shape-circle {
+        border-radius: 50%;
+      }
+
+      .shape-triangle {
+        border: 0;
+        background: #fff;
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+      }
+
+      .shape-diamond {
+        rotate: 45deg;
+      }
+
+      .workspace {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .replicas {
+        display: grid;
+        gap: 0.75rem;
+        padding: 0.75rem;
+      }
+
+      .replica-card {
+        display: grid;
+        gap: 0.8rem;
+        min-height: 10rem;
+        padding: 0.8rem;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        background: #050505;
+        transition:
+          border-color 160ms ease,
+          background 160ms ease;
+      }
+
+      .replica-card.is-targeted,
+      .remove-target.is-targeted {
+        border-color: #fff;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .replica-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .replica-heading h2 {
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .replica-count,
+      .replica-stats,
+      .empty {
+        color: rgba(255, 255, 255, 0.62);
+        font-family: 'IBM Plex Mono', 'Cascadia Code', monospace;
+        font-size: 0.82rem;
+      }
+
+      .replica-items {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: flex-start;
+        gap: 0.55rem;
+        min-height: 3rem;
+      }
+
+      .remove-target {
+        display: grid;
+        place-items: center;
+        min-height: 5rem;
+        padding: 1rem;
+        color: rgba(255, 255, 255, 0.72);
+        text-align: center;
+      }
+
+      .gossip-packet {
+        position: fixed;
+        z-index: 2147483647;
+        display: inline-grid;
+        place-items: center;
+        width: 3.7rem;
+        height: 1.75rem;
+        margin: -0.875rem 0 0 -1.85rem;
+        border: 1px solid #fff;
+        border-radius: 8px;
+        background: #000;
+        color: #fff;
+        font-family: 'IBM Plex Mono', 'Cascadia Code', monospace;
+        font-size: 0.72rem;
+        pointer-events: none;
+        transition:
+          transform 440ms ease,
+          opacity 440ms ease;
+      }
+
+      @media (min-width: 42rem) {
         main {
           padding: 2rem;
         }
@@ -177,8 +352,19 @@
           padding: 1.75rem;
         }
 
-        .actions {
+        .status-row {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
         }
       }
     </style>
@@ -218,19 +404,47 @@
             >
           </div>
         </nav>
+
         <h1>Convergent Replicated Set</h1>
         <p class="lede">
-          drag items in and out from the options to either of the two replicas
-          in any sequence asymmetric sequence, click merge and see how they
-          converge, you can also try adding the same item twice wich will not
-          happend due to the no duplicate behaviour of a set
+          Drag shapes into either replica, remove members from one replica,
+          duplicate the same content, then merge and watch the visible set
+          converge.
         </p>
-        <div class="controls">
-          <div class="options"></div>
-          <div class="replica"></div>
-          <div class="replica"></div>
-          <button>merge</button>
-        </div>
+
+        <section class="demo" data-crset-demo data-converged="true">
+          <div class="actions" aria-label="Demo actions">
+            <button class="action" type="button" data-action="gossip">
+              merge
+            </button>
+          </div>
+
+          <div class="status-row" aria-live="polite">
+            <p class="status" data-status></p>
+            <p data-dedup></p>
+          </div>
+
+          <section
+            class="palette"
+            aria-label="Available shapes"
+            data-palette
+          ></section>
+
+          <div class="workspace">
+            <section
+              class="replicas"
+              aria-label="Replicas"
+              data-replicas
+            ></section>
+            <aside
+              class="remove-target"
+              data-remove-target
+              data-drop-target="remove"
+            >
+              drop replica items here to delete locally
+            </aside>
+          </div>
+        </section>
       </section>
     </main>
     <script type="module" src="index.js"></script>
