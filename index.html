@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="color-scheme" content="dark" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Package name</title>
+    <title>Convergent Replicated Set (CR-Set) Demo</title>
     <style>
       :root {
         color-scheme: dark;
@@ -188,30 +188,49 @@
       <section class="shell">
         <nav class="links" aria-label="Project links">
           <div>
-            <a href="https://jsr.io/@sovereignbase/peer2peer">
+            <a href="https://jsr.io/@sovereignbase/convergent-replicated-set">
               <img src="https://cdn.simpleicons.org/jsr/white" alt="" />
               jsr
             </a>
-            <a href="https://www.npmjs.com/package/@sovereignbase/peer2peer">
+            <a
+              href="https://www.npmjs.com/package/@sovereignbase/convergent-replicated-set"
+            >
               <img src="https://cdn.simpleicons.org/npm/white" alt="" />
               npm
             </a>
-            <a href="https://github.com/sovereignbase/peer2peer">
+            <a
+              href="https://github.com/sovereignbase/convergent-replicated-set"
+            >
               <img src="https://cdn.simpleicons.org/github/white" alt="" />
               GitHub
             </a>
           </div>
           <div>
-            <a class="spec-link" href="https://sovereignbase.dev/peer2peer/docs"
+            <a
+              class="spec-link"
+              href="https://sovereignbase.dev/convergent-replicated-set/docs"
               >see documentation</a
             >
-            <a class="spec-link" href="https://sovereignbase.dev/peer2peer/spec"
+            <a
+              class="spec-link"
+              href="https://sovereignbase.dev/convergent-replicated-set/spec"
               >read specification</a
             >
           </div>
         </nav>
-        <h1></h1>
-        <p class="lede"></p>
+        <h1>Convergent Replicated Set</h1>
+        <p class="lede">
+          drag items in and out from the options to either of the two replicas
+          in any sequence asymmetric sequence, click merge and see how they
+          converge, you can also try adding the same item twice wich will not
+          happend due to the no duplicate behaviour of a set
+        </p>
+        <div class="controls">
+          <div class="options"></div>
+          <div class="replica"></div>
+          <div class="replica"></div>
+          <button>merge</button>
+        </div>
       </section>
     </main>
     <script type="module" src="index.js"></script>

@@ -50,8 +50,8 @@
     ]
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.5.0",
-    "@commitlint/config-conventional": "^20.5.0",
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
     "@playwright/test": "^1.59.1",
     "@types/node": "^25.6.0",
     "c8": "^11.0.0",
@@ -63,7 +63,8 @@
     "tsup": "^8.5.1",
     "typedoc": "^0.28.19",
     "typescript": "^5.9.3",
-    "wrangler": "^4.84.1"
+    "wrangler": "^4.87.0",
+    "@sovereignbase/dragonwatch": "^1.0.2"
   },
   "repository": {
     "type": "git",
