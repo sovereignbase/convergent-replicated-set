@@ -2559,7 +2559,9 @@ var CRSet = class {
   acknowledge() {
     const ack = __acknowledge(this.state);
     if (!ack) return;
-    void this.eventTarget.dispatchEvent(new CustomEvent("ack", { detail: ack }));
+    void this.eventTarget.dispatchEvent(
+      new CustomEvent("ack", { detail: ack })
+    );
   }
   /**
    * Removes tombstones that every provided frontier has acknowledged.
@@ -2846,6 +2848,7 @@ function wireFreeDragging() {
     tile.addEventListener("pointerdown", (event) => {
       const value = readTileValue(tile);
       if (!value) return;
+      detachFromPalette(tile, value);
       const watchers = replicaCards();
       const blockedReplicas = duplicateReplicasFor(tile, value);
       for (const watcher of watchers) startWatch(watcher, tile);
@@ -2876,6 +2879,26 @@ function wireFreeDragging() {
       tile.addEventListener("pointercancel", stop, { once: true });
     });
   }
+}
+function detachFromPalette(tile, value) {
+  if (!palette?.contains(tile)) return;
+  const rect = tile.getBoundingClientRect();
+  const replacement = createShapeButton(
+    tile.dataset.valueId ?? valueId(value),
+    tile.getAttribute("aria-label") ?? value,
+    value
+  );
+  tile.replaceWith(replacement);
+  tile.dataset.detached = "true";
+  tile.style.position = "fixed";
+  tile.style.left = `${rect.left}px`;
+  tile.style.top = `${rect.top}px`;
+  tile.style.width = `${rect.width}px`;
+  tile.style.height = `${rect.height}px`;
+  tile.style.margin = "0";
+  tile.style.transform = "";
+  document.body.append(tile);
+  wireFreeDragging();
 }
 function syncShapeMembership(tile, blockedReplicas = /* @__PURE__ */ new Set()) {
   const value = readTileValue(tile);

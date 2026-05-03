@@ -2559,7 +2559,9 @@ var CRSet = class {
   acknowledge() {
     const ack = __acknowledge(this.state);
     if (!ack) return;
-    void this.eventTarget.dispatchEvent(new CustomEvent("ack", { detail: ack }));
+    void this.eventTarget.dispatchEvent(
+      new CustomEvent("ack", { detail: ack })
+    );
   }
   /**
    * Removes tombstones that every provided frontier has acknowledged.

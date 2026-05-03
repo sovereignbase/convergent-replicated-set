@@ -2,7 +2,7 @@
   "type": "module",
   "license": "Apache-2.0",
   "name": "@sovereignbase/convergent-replicated-set",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Convergent Replicated Set (CR-Set) , a delta CRDT for unordered, duplicate-free collections.",
   "keywords": [
     "crdt",
