@@ -97,11 +97,11 @@ export class CRSet<T> {
       )
     }
     void this.eventTarget.dispatchEvent(
-      new CustomEvent('delta', { detail: result.delta })
+      new CustomEvent<CRSetDelta<T>>('delta', { detail: result.delta })
     )
 
     void this.eventTarget.dispatchEvent(
-      new CustomEvent('change', { detail: result.change })
+      new CustomEvent<CRSetChange<T>>('change', { detail: result.change })
     )
   }
 
@@ -131,11 +131,11 @@ export class CRSet<T> {
     if (!result) return
 
     void this.eventTarget.dispatchEvent(
-      new CustomEvent('delta', { detail: result.delta })
+      new CustomEvent<CRSetDelta<T>>('delta', { detail: result.delta })
     )
 
     void this.eventTarget.dispatchEvent(
-      new CustomEvent('change', { detail: result.change })
+      new CustomEvent<CRSetChange<T>>('change', { detail: result.change })
     )
   }
 
@@ -149,11 +149,11 @@ export class CRSet<T> {
     if (!result) return
 
     void this.eventTarget.dispatchEvent(
-      new CustomEvent('delta', { detail: result.delta })
+      new CustomEvent<CRSetDelta<T>>('delta', { detail: result.delta })
     )
 
     void this.eventTarget.dispatchEvent(
-      new CustomEvent('change', { detail: result.change })
+      new CustomEvent<CRSetChange<T>>('change', { detail: result.change })
     )
   }
 
@@ -185,12 +185,12 @@ export class CRSet<T> {
       0
     ) {
       void this.eventTarget.dispatchEvent(
-        new CustomEvent('delta', { detail: result.delta })
+        new CustomEvent<CRSetDelta<T>>('delta', { detail: result.delta })
       )
     }
     if (Object.keys(result.change).length > 0) {
       void this.eventTarget.dispatchEvent(
-        new CustomEvent('change', { detail: result.change })
+        new CustomEvent<CRSetChange<T>>('change', { detail: result.change })
       )
     }
   }
@@ -204,7 +204,9 @@ export class CRSet<T> {
   acknowledge(): void {
     const ack = __acknowledge<T>(this.state)
     if (!ack) return
-    void this.eventTarget.dispatchEvent(new CustomEvent('ack', { detail: ack }))
+    void this.eventTarget.dispatchEvent(
+      new CustomEvent<CRSetAck>('ack', { detail: ack })
+    )
   }
 
   /**
@@ -222,7 +224,7 @@ export class CRSet<T> {
   snapshot(): void {
     const snapshot = __snapshot<T>(this.state)
     void this.eventTarget.dispatchEvent(
-      new CustomEvent('snapshot', { detail: snapshot })
+      new CustomEvent<CRSetSnapshot<T>>('snapshot', { detail: snapshot })
     )
   }
 
