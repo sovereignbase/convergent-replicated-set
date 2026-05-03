@@ -2687,33 +2687,6 @@ function restoreDraggedStyle(dragged, restoredStyle) {
   dragged.style.transition = restoredStyle.transition;
   dragged.style.zIndex = restoredStyle.zIndex;
 }
-function ignoreAnimationAbort(error) {
-  if (error instanceof DOMException && error.name === "AbortError") return;
-  throw error;
-}
-function dropDraggedOnTarget(dragged, target, commit, animationDuration, restoredStyle) {
-  const raisedStyle = raiseDragged(dragged);
-  const nextRestoredStyle = restoredStyle ?? raisedStyle;
-  const x = Number(dragged.dataset.x ?? 0);
-  const y = Number(dragged.dataset.y ?? 0);
-  const from = dragged.getBoundingClientRect();
-  const to = target.getBoundingClientRect();
-  const next = `translate(${x + to.left - from.left}px, ${y + to.top - from.top}px)`;
-  const animation = dragged.animate(
-    [{ transform: dragged.style.transform || "none" }, { transform: next }],
-    { duration: animationDuration, easing: "ease" }
-  );
-  dragged.style.transform = next;
-  void animation.finished.finally(() => {
-    void commit();
-    delete dragged.dataset.x;
-    delete dragged.dataset.y;
-    void restoreDraggedStyle(dragged, {
-      ...nextRestoredStyle,
-      transform: ""
-    });
-  }).catch(ignoreAnimationAbort);
-}
 function intersects(a, b) {
   const ar = a.getBoundingClientRect();
   const br = b.getBoundingClientRect();
@@ -2723,30 +2696,6 @@ function moveDraggedToOffset(dragged, x, y) {
   dragged.dataset.x = String(x);
   dragged.dataset.y = String(y);
   dragged.style.transform = `translate(${x}px, ${y}px)`;
-}
-function ignoreAnimationAbort2(error) {
-  if (error instanceof DOMException && error.name === "AbortError") return;
-  throw error;
-}
-function returnDraggedToStart(dragged, animationDuration, restoredStyle) {
-  const nextTransform = restoredStyle?.transform || "none";
-  const animation = dragged.animate(
-    [
-      { transform: dragged.style.transform || "none" },
-      { transform: nextTransform }
-    ],
-    { duration: animationDuration, easing: "ease" }
-  );
-  dragged.style.transform = nextTransform;
-  delete dragged.dataset.x;
-  delete dragged.dataset.y;
-  void animation.finished.finally(() => {
-    if (!restoredStyle) {
-      dragged.style.transform = "";
-      return;
-    }
-    void restoreDraggedStyle(dragged, restoredStyle);
-  }).catch(ignoreAnimationAbort2);
 }
 function drag(pointerEvent, onIntersectingStart, onIntersectingStop, onMove) {
   const target = pointerEvent.target;
@@ -2817,223 +2766,23 @@ function stopWatch(watcher, elementToWatch) {
   if (watcher.dataset.dragonWatches === elementToWatch.dataset.dragonwatchId)
     delete watcher.dataset.dragonWatches;
 }
-var DragTarget = class {
-  /**
-   * Creates a drag target interaction.
-   *
-   * @param dragged The element users can drag.
-   * @param targets One target element, or an iterable of target elements.
-   * @param action The DOM operation to perform when a target accepts the drag.
-   * @param animationDuration The duration of generated animations, in milliseconds.
-   */
-  constructor(dragged, targets, action, animationDuration = 200) {
-    this.dragged = dragged;
-    this.action = action;
-    this.animationDuration = animationDuration;
-    this.targets = targets instanceof HTMLElement ? [targets] : Array.from(targets);
-    void this.dragged.addEventListener(
-      "pointerdown",
-      (event) => {
-        if (this.used) return;
-        let activeTarget;
-        for (const target of this.targets) void startWatch(target, this.dragged);
-        void drag(
-          event,
-          (_dragged, target) => {
-            activeTarget = target;
-            void this.eventTarget.dispatchEvent(
-              new CustomEvent(
-                "intersecting",
-                {
-                  detail: { thisEl: this.dragged, withEl: target }
-                }
-              )
-            );
-          },
-          (_dragged, target) => {
-            if (activeTarget === target) activeTarget = void 0;
-            void this.eventTarget.dispatchEvent(
-              new CustomEvent(
-                "notintersecting",
-                {
-                  detail: { thisEl: this.dragged, withEl: target }
-                }
-              )
-            );
-          },
-          (_dragged, { thisEl, x, y }, pointerEvent) => {
-            void this.eventTarget.dispatchEvent(
-              new CustomEvent("drag", {
-                detail: { pointerEvent, thisEl, x, y }
-              })
-            );
-          }
-        );
-        const stop = () => {
-          if (this.used) return;
-          for (const target2 of this.targets)
-            void stopWatch(target2, this.dragged);
-          const target = activeTarget;
-          if (target) {
-            this.used = true;
-            void this.abortController.abort();
-            void dropDraggedOnTarget(
-              this.dragged,
-              target,
-              () => {
-                if (this.action === "replace")
-                  void target.replaceWith(this.dragged);
-                else void target.appendChild(this.dragged);
-                void this.eventTarget.dispatchEvent(
-                  new CustomEvent("swap", {
-                    detail: { thisEl: this.dragged, withEl: target }
-                  })
-                );
-              },
-              this.animationDuration
-            );
-          } else {
-            void returnDraggedToStart(this.dragged, this.animationDuration);
-            void this.eventTarget.dispatchEvent(
-              new CustomEvent("settle", {
-                detail: { thisEl: this.dragged }
-              })
-            );
-          }
-          activeTarget = void 0;
-        };
-        void this.dragged.addEventListener("pointerup", stop, {
-          once: true,
-          signal: this.abortController.signal
-        });
-        void this.dragged.addEventListener("pointercancel", stop, {
-          once: true,
-          signal: this.abortController.signal
-        });
-      },
-      { signal: this.abortController.signal }
-    );
-  }
-  dragged;
-  action;
-  animationDuration;
-  /**
-   * The target elements that can accept the dragged element.
-   */
-  targets;
-  abortController = new AbortController();
-  eventTarget = new EventTarget();
-  restoredStyles = /* @__PURE__ */ new Map();
-  used = false;
-  /**
-   * Replays a drag movement for the managed dragged element.
-   *
-   * @param instruction The dragged element and translate offset to apply.
-   */
-  remoteDrag({ thisEl, x, y }) {
-    if (this.used || thisEl !== this.dragged) return;
-    for (const animation of thisEl.getAnimations()) animation.cancel();
-    if (!this.restoredStyles.has(thisEl)) {
-      void this.restoredStyles.set(thisEl, raiseDragged(thisEl));
-      thisEl.style.transition = "none";
-    }
-    void moveDraggedToOffset(thisEl, x, y);
-  }
-  /**
-   * Replays a committed drop onto a target.
-   *
-   * @param swap The dragged element and target element to commit.
-   */
-  remoteSwap({ thisEl, withEl }) {
-    if (this.used || thisEl !== this.dragged) return;
-    const target = this.targets.find((target2) => target2 === withEl);
-    if (!target) return;
-    this.used = true;
-    const restoredStyle = this.restoredStyles.get(thisEl);
-    void this.restoredStyles.delete(thisEl);
-    for (const watchedTarget of this.targets)
-      void stopWatch(watchedTarget, this.dragged);
-    void this.abortController.abort();
-    void dropDraggedOnTarget(
-      thisEl,
-      target,
-      () => {
-        if (this.action === "replace") void target.replaceWith(thisEl);
-        else void target.appendChild(thisEl);
-      },
-      this.animationDuration,
-      restoredStyle
-    );
-  }
-  /**
-   * Replays the end of an uncommitted drag operation.
-   *
-   * @param event The settle event detail to apply.
-   */
-  remoteSettle({ thisEl }) {
-    if (this.used || thisEl !== this.dragged) return;
-    const restoredStyle = this.restoredStyles.get(thisEl);
-    void this.restoredStyles.delete(thisEl);
-    void returnDraggedToStart(thisEl, this.animationDuration, restoredStyle);
-  }
-  /**
-   * Returns the first target with the given element id.
-   *
-   * @param id The element id to match.
-   * @returns The matching target, or `undefined` if no target matches.
-   */
-  getTargetById(id) {
-    return this.targets.find((target) => target.id === id);
-  }
-  /**
-   * Appends an event listener for events whose type is `type`.
-   *
-   * @param type The drag target event type to listen for.
-   * @param listener The callback or event listener object that receives the event.
-   * @param options Options that control listener registration.
-   */
-  addEventListener(type, listener, options) {
-    void this.eventTarget.addEventListener(
-      type,
-      listener,
-      options
-    );
-  }
-  /**
-   * Removes an event listener previously registered with {@link addEventListener}.
-   *
-   * @param type The drag target event type.
-   * @param listener The callback or event listener object to remove.
-   * @param options Options that identify the listener registration.
-   */
-  removeEventListener(type, listener, options) {
-    void this.eventTarget.removeEventListener(
-      type,
-      listener,
-      options
-    );
-  }
-};
 
 // in-browser-testing-libs.ts
 var values = [
   { id: "circle", label: "circle", value: "circle" },
   { id: "square", label: "square", value: "square" },
   { id: "triangle", label: "triangle", value: "triangle" },
-  { id: "diamond", label: "diamond", value: "diamond" },
-  { id: "circle-copy", label: "circle duplicate", value: "circle" }
+  { id: "diamond", label: "diamond", value: "diamond" }
 ];
 var demo = document.querySelector("[data-crset-demo]");
 var palette = document.querySelector("[data-palette]");
 var replicasEl = document.querySelector("[data-replicas]");
-var removeTarget = document.querySelector("[data-remove-target]");
-var statusEl = document.querySelector("[data-status]");
 var gossipButton = document.querySelector(
   '[data-action="gossip"]'
 );
 var replicas = createReplicas(2);
 var gossiping = false;
-if (demo && palette && replicasEl && removeTarget && statusEl && gossipButton) {
+if (demo && palette && replicasEl && gossipButton) {
   gossipButton.addEventListener("click", () => void gossip());
   render();
 }
@@ -3045,19 +2794,21 @@ function createReplicas(count) {
   }));
 }
 function render() {
-  if (!palette || !replicasEl || !removeTarget || !statusEl) return;
+  if (!palette || !replicasEl) return;
   palette.replaceChildren(
-    ...values.map((entry) => createTile(entry, "palette"))
+    ...values.map(
+      (entry) => createShapeButton(entry.id, entry.label, entry.value)
+    )
   );
   replicasEl.replaceChildren(...replicas.map(createReplicaCard));
-  wireDragTargets();
+  wireFreeDragging();
   updateStatus();
+  document.body.dataset.ready = "true";
 }
 function createReplicaCard(replica) {
   const card = document.createElement("section");
   card.className = "replica-card";
   card.dataset.replicaId = replica.id;
-  card.dataset.dropTarget = "replica";
   card.setAttribute("aria-label", replica.label);
   const heading = document.createElement("div");
   heading.className = "replica-heading";
@@ -3067,98 +2818,123 @@ function createReplicaCard(replica) {
   count.className = "replica-count";
   count.textContent = `${replica.set.size} live`;
   heading.append(title, count);
-  const items = document.createElement("div");
-  items.className = "replica-items";
-  const liveValues = replica.set.values().sort(compareValues);
-  if (liveValues.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = "empty";
-    items.append(empty);
-  } else {
-    items.append(
-      ...liveValues.map(
-        (value) => createTile(
-          {
-            id: valueId(value),
-            label: value,
-            value
-          },
-          replica.id
-        )
-      )
-    );
-  }
   const snapshot = replica.set.toJSON();
   const stats = document.createElement("p");
   stats.className = "replica-stats";
   stats.textContent = `${snapshot.values.length} values / ${snapshot.tombstones.length} tombstones`;
-  card.append(heading, items, stats);
+  card.append(heading, stats);
   return card;
 }
-function createTile(entry, source) {
+function createShapeButton(id, label, value) {
   const tile = document.createElement("button");
   tile.type = "button";
   tile.className = "item-tile";
   tile.dataset.tile = "true";
-  tile.dataset.valueId = entry.id;
-  tile.dataset.source = source;
-  tile.dataset.value = entry.value;
-  tile.setAttribute("aria-label", entry.label);
+  tile.dataset.valueId = id;
+  tile.dataset.value = value;
+  tile.setAttribute("aria-label", label);
   const shape = document.createElement("span");
-  shape.className = `shape shape-${entry.value}`;
+  shape.className = `shape shape-${value}`;
   shape.setAttribute("aria-hidden", "true");
   tile.append(shape);
   return tile;
 }
-function wireDragTargets() {
-  if (!replicasEl || !removeTarget) return;
-  const targets = [
-    ...replicasEl.querySelectorAll('[data-drop-target="replica"]'),
-    removeTarget
-  ];
+function wireFreeDragging() {
   for (const tile of document.querySelectorAll("[data-tile]")) {
-    const dragTarget = new DragTarget(tile, targets, "append", 180);
-    dragTarget.addEventListener("intersecting", ({ detail }) => {
-      detail.withEl.classList.add("is-targeted");
-    });
-    dragTarget.addEventListener("notintersecting", ({ detail }) => {
-      detail.withEl.classList.remove("is-targeted");
-    });
-    dragTarget.addEventListener("settle", () => render());
-    dragTarget.addEventListener("swap", ({ detail }) => {
-      detail.withEl.classList.remove("is-targeted");
-      commitDrop(tile, detail.withEl);
+    if (tile.dataset.dragBound === "true") continue;
+    tile.dataset.dragBound = "true";
+    tile.addEventListener("pointerdown", (event) => {
+      const value = readTileValue(tile);
+      if (!value) return;
+      const watchers = replicaCards();
+      const blockedReplicas = duplicateReplicasFor(tile, value);
+      for (const watcher of watchers) startWatch(watcher, tile);
+      drag(
+        event,
+        (_dragged, watcher) => {
+          const replicaId = watcher.dataset.replicaId;
+          if (replicaId && blockedReplicas.has(replicaId)) {
+            watcher.classList.add("is-repelling");
+            repelFrom(tile, watcher);
+          } else {
+            watcher.classList.add("is-targeted");
+          }
+          syncShapeMembership(tile, blockedReplicas);
+        },
+        (_dragged, watcher) => {
+          watcher.classList.remove("is-targeted", "is-repelling");
+          syncShapeMembership(tile, blockedReplicas);
+        },
+        () => syncShapeMembership(tile, blockedReplicas)
+      );
+      const stop = () => {
+        for (const watcher of watchers) stopWatch(watcher, tile);
+        clearTargeting();
+        syncShapeMembership(tile, blockedReplicas);
+      };
+      tile.addEventListener("pointerup", stop, { once: true });
+      tile.addEventListener("pointercancel", stop, { once: true });
     });
   }
 }
-function commitDrop(tile, target) {
+function syncShapeMembership(tile, blockedReplicas = /* @__PURE__ */ new Set()) {
   const value = readTileValue(tile);
-  if (!value) {
-    render();
-    return;
-  }
-  const source = tile.dataset.source ?? "";
-  const replicaId = target.dataset.replicaId;
-  if (target.dataset.dropTarget === "remove") {
-    const replica2 = replicas.find((candidate) => candidate.id === source);
-    if (replica2) {
-      replica2.set.delete(value);
+  if (!value) return;
+  for (const replica of replicas) {
+    const card = replicaCard(replica.id);
+    if (!card) continue;
+    const inside = intersects2(tile, card);
+    const blocked = blockedReplicas.has(replica.id);
+    if (!blocked) {
+      if (inside) replica.set.add(value);
+      else replica.set.delete(value);
     }
-    render();
-    return;
+    card.classList.toggle("has-overlap", inside && !blocked);
+    card.classList.toggle("is-repelling", inside && blocked);
+    updateReplicaCard(replica);
   }
-  const replica = replicas.find((candidate) => candidate.id === replicaId);
-  if (replica) {
-    replica.set.add(value);
+  updateStatus();
+}
+function duplicateReplicasFor(tile, value) {
+  const blocked = /* @__PURE__ */ new Set();
+  for (const replica of replicas) {
+    const card = replicaCard(replica.id);
+    if (card && replica.set.has(value) && !intersects2(tile, card)) {
+      blocked.add(replica.id);
+    }
   }
-  render();
+  return blocked;
+}
+function repelFrom(tile, card) {
+  const tileRect = tile.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  const pushes = [
+    { x: cardRect.left - tileRect.right - 8, y: 0 },
+    { x: cardRect.right - tileRect.left + 8, y: 0 },
+    { x: 0, y: cardRect.top - tileRect.bottom - 8 },
+    { x: 0, y: cardRect.bottom - tileRect.top + 8 }
+  ];
+  const push = pushes.reduce(
+    (closest, candidate) => Math.abs(candidate.x) + Math.abs(candidate.y) < Math.abs(closest.x) + Math.abs(closest.y) ? candidate : closest
+  );
+  const x = Number(tile.dataset.x ?? 0) + push.x;
+  const y = Number(tile.dataset.y ?? 0) + push.y;
+  const from = tile.style.transform || "none";
+  const to = `translate(${x}px, ${y}px)`;
+  tile.dataset.x = String(x);
+  tile.dataset.y = String(y);
+  tile.classList.add("is-repelling");
+  tile.style.transform = to;
+  void tile.animate([{ transform: from }, { transform: to }], {
+    duration: 140,
+    easing: "ease-out"
+  });
+  window.setTimeout(() => tile.classList.remove("is-repelling"), 180);
 }
 async function gossip() {
   if (gossiping) return;
   gossiping = true;
   gossipButton?.toggleAttribute("disabled", true);
-  setStatus("gossiping snapshots between replicas");
   const snapshots = replicas.map((replica) => ({
     source: replica,
     snapshot: replica.set.toJSON()
@@ -3170,19 +2946,16 @@ async function gossip() {
     deliveries.map(async (delivery, index) => {
       await animatePacket(delivery.source.id, delivery.target.id, index);
       delivery.target.set.merge(delivery.snapshot);
+      updateReplicaCard(delivery.target);
     })
   );
   gossiping = false;
   gossipButton?.toggleAttribute("disabled", false);
-  render();
+  updateStatus();
 }
 function animatePacket(sourceId, targetId, index) {
-  const source = document.querySelector(
-    `[data-replica-id="${sourceId}"]`
-  );
-  const target = document.querySelector(
-    `[data-replica-id="${targetId}"]`
-  );
+  const source = replicaCard(sourceId);
+  const target = replicaCard(targetId);
   if (!source || !target) return Promise.resolve();
   const sourceRect = source.getBoundingClientRect();
   const targetRect = target.getBoundingClientRect();
@@ -3206,41 +2979,63 @@ function animatePacket(sourceId, targetId, index) {
     }, delay + 520);
   });
 }
+function updateReplicaCard(replica) {
+  const card = replicaCard(replica.id);
+  const count = card?.querySelector(".replica-count");
+  const stats = card?.querySelector(".replica-stats");
+  const snapshot = replica.set.toJSON();
+  if (count) count.textContent = `${replica.set.size} live`;
+  if (stats) {
+    stats.textContent = `${snapshot.values.length} values / ${snapshot.tombstones.length} tombstones`;
+  }
+}
 function updateStatus() {
   if (!demo) return;
   const projections = replicas.map((replica) => projection(replica.set));
-  const [first = ""] = projections;
-  const converged = projections.every((projection2) => projection2 === first);
+  const [first] = projections;
+  const converged = first ? projections.every((candidate) => sameMembers(candidate, first)) : true;
   const unionSize = new Set(
     replicas.flatMap((replica) => replica.set.values().map(valueId))
   ).size;
-  const duplicateVisible = replicas.some(
-    (replica) => replica.set.size < replica.set.toJSON().values.length
-  );
   demo.dataset.converged = String(converged);
-  setStatus(
-    converged ? `converged: ${unionSize} unique visible shapes` : `diverged: ${unionSize} unique shapes across ${replicas.length} replicas`
-  );
-  const dedup = document.querySelector("[data-dedup]");
-  if (dedup) {
-    dedup.textContent = duplicateVisible ? "same content has one visible member" : "duplicate drops stay no-op";
+  demo.dataset.visible = String(unionSize);
+}
+function clearTargeting() {
+  for (const target of document.querySelectorAll(
+    ".is-targeted, .is-repelling, .has-overlap"
+  )) {
+    target.classList.remove("is-targeted", "is-repelling", "has-overlap");
   }
 }
-function setStatus(message) {
-  if (statusEl) statusEl.textContent = message;
+function replicaCards() {
+  return Array.from(
+    document.querySelectorAll(".replica-card[data-replica-id]")
+  );
+}
+function replicaCard(id) {
+  return document.querySelector(
+    `.replica-card[data-replica-id="${id}"]`
+  ) ?? void 0;
+}
+function intersects2(left, right) {
+  const leftRect = left.getBoundingClientRect();
+  const rightRect = right.getBoundingClientRect();
+  return !(leftRect.right < rightRect.left || leftRect.left > rightRect.right || leftRect.bottom < rightRect.top || leftRect.top > rightRect.bottom);
 }
 function readTileValue(tile) {
   const value = tile.dataset.value;
   return isDemoValue(value) ? value : void 0;
 }
 function projection(set) {
-  return set.values().map(valueId).sort().join("|");
+  return new Set(set.values().map(valueId));
 }
 function valueId(value) {
   return value;
 }
-function compareValues(left, right) {
-  return valueId(left).localeCompare(valueId(right));
+function sameMembers(left, right) {
+  if (left.size !== right.size) return false;
+  for (const value of left) if (!right.has(value)) return false;
+  return true;
 }
 function isDemoValue(value) {
   return value === "circle" || value === "square" || value === "triangle" || value === "diamond";

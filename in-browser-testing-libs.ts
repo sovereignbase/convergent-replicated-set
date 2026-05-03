@@ -1,5 +1,5 @@
 import { CRSet } from '@sovereignbase/convergent-replicated-set'
-import { DragTarget } from '@sovereignbase/dragonwatch'
+import { drag, startWatch, stopWatch } from '@sovereignbase/dragonwatch'
 
 type DemoValue = 'circle' | 'square' | 'triangle' | 'diamond'
 
@@ -18,22 +18,19 @@ const values: Array<{
   { id: 'square', label: 'square', value: 'square' },
   { id: 'triangle', label: 'triangle', value: 'triangle' },
   { id: 'diamond', label: 'diamond', value: 'diamond' },
-  { id: 'circle-copy', label: 'circle duplicate', value: 'circle' },
 ]
 
 const demo = document.querySelector<HTMLElement>('[data-crset-demo]')
 const palette = document.querySelector<HTMLElement>('[data-palette]')
 const replicasEl = document.querySelector<HTMLElement>('[data-replicas]')
-const removeTarget = document.querySelector<HTMLElement>('[data-remove-target]')
-const statusEl = document.querySelector<HTMLElement>('[data-status]')
 const gossipButton = document.querySelector<HTMLButtonElement>(
   '[data-action="gossip"]'
 )
 
-let replicas = createReplicas(2)
+const replicas = createReplicas(2)
 let gossiping = false
 
-if (demo && palette && replicasEl && removeTarget && statusEl && gossipButton) {
+if (demo && palette && replicasEl && gossipButton) {
   gossipButton.addEventListener('click', () => void gossip())
   render()
 }
@@ -47,20 +44,22 @@ function createReplicas(count: number): Array<Replica> {
 }
 
 function render(): void {
-  if (!palette || !replicasEl || !removeTarget || !statusEl) return
+  if (!palette || !replicasEl) return
   palette.replaceChildren(
-    ...values.map((entry) => createTile(entry, 'palette'))
+    ...values.map((entry) =>
+      createShapeButton(entry.id, entry.label, entry.value)
+    )
   )
   replicasEl.replaceChildren(...replicas.map(createReplicaCard))
-  wireDragTargets()
+  wireFreeDragging()
   updateStatus()
+  document.body.dataset.ready = 'true'
 }
 
 function createReplicaCard(replica: Replica): HTMLElement {
   const card = document.createElement('section')
   card.className = 'replica-card'
   card.dataset.replicaId = replica.id
-  card.dataset.dropTarget = 'replica'
   card.setAttribute('aria-label', replica.label)
 
   const heading = document.createElement('div')
@@ -75,121 +74,177 @@ function createReplicaCard(replica: Replica): HTMLElement {
 
   heading.append(title, count)
 
-  const items = document.createElement('div')
-  items.className = 'replica-items'
-
-  const liveValues = replica.set.values().sort(compareValues)
-  if (liveValues.length === 0) {
-    const empty = document.createElement('p')
-    empty.className = 'empty'
-    empty.textContent = 'empty'
-    items.append(empty)
-  } else {
-    items.append(
-      ...liveValues.map((value) =>
-        createTile(
-          {
-            id: valueId(value),
-            label: value,
-            value,
-          },
-          replica.id
-        )
-      )
-    )
-  }
-
   const snapshot = replica.set.toJSON()
   const stats = document.createElement('p')
   stats.className = 'replica-stats'
   stats.textContent = `${snapshot.values.length} values / ${snapshot.tombstones.length} tombstones`
 
-  card.append(heading, items, stats)
+  card.append(heading, stats)
   return card
 }
 
-function createTile(
-  entry: {
-    readonly id: string
-    readonly label: string
-    readonly value: DemoValue
-  },
-  source: string
+function createShapeButton(
+  id: string,
+  label: string,
+  value: DemoValue
 ): HTMLElement {
   const tile = document.createElement('button')
   tile.type = 'button'
   tile.className = 'item-tile'
   tile.dataset.tile = 'true'
-  tile.dataset.valueId = entry.id
-  tile.dataset.source = source
-  tile.dataset.value = entry.value
-  tile.setAttribute('aria-label', entry.label)
+  tile.dataset.valueId = id
+  tile.dataset.value = value
+  tile.setAttribute('aria-label', label)
 
   const shape = document.createElement('span')
-  shape.className = `shape shape-${entry.value}`
+  shape.className = `shape shape-${value}`
   shape.setAttribute('aria-hidden', 'true')
 
   tile.append(shape)
   return tile
 }
 
-function wireDragTargets(): void {
-  if (!replicasEl || !removeTarget) return
-  const targets = [
-    ...replicasEl.querySelectorAll<HTMLElement>('[data-drop-target="replica"]'),
-    removeTarget,
-  ]
-
+function wireFreeDragging(): void {
   for (const tile of document.querySelectorAll<HTMLElement>('[data-tile]')) {
-    const dragTarget = new DragTarget(tile, targets, 'replace', 180)
+    if (tile.dataset.dragBound === 'true') continue
+    tile.dataset.dragBound = 'true'
+    tile.addEventListener('pointerdown', (event) => {
+      const value = readTileValue(tile)
+      if (!value) return
+      detachFromPalette(tile, value)
+      const watchers = replicaCards()
+      const blockedReplicas = duplicateReplicasFor(tile, value)
+      for (const watcher of watchers) startWatch(watcher, tile)
 
-    dragTarget.addEventListener('intersecting', ({ detail }) => {
-      detail.withEl.classList.add('is-targeted')
-    })
+      drag(
+        event,
+        (_dragged, watcher) => {
+          const replicaId = watcher.dataset.replicaId
+          if (replicaId && blockedReplicas.has(replicaId)) {
+            watcher.classList.add('is-repelling')
+            repelFrom(tile, watcher)
+          } else {
+            watcher.classList.add('is-targeted')
+          }
+          syncShapeMembership(tile, blockedReplicas)
+        },
+        (_dragged, watcher) => {
+          watcher.classList.remove('is-targeted', 'is-repelling')
+          syncShapeMembership(tile, blockedReplicas)
+        },
+        () => syncShapeMembership(tile, blockedReplicas)
+      )
 
-    dragTarget.addEventListener('notintersecting', ({ detail }) => {
-      detail.withEl.classList.remove('is-targeted')
-    })
+      const stop = () => {
+        for (const watcher of watchers) stopWatch(watcher, tile)
+        clearTargeting()
+        syncShapeMembership(tile, blockedReplicas)
+      }
 
-    dragTarget.addEventListener('settle', () => render())
-    dragTarget.addEventListener('swap', ({ detail }) => {
-      detail.withEl.classList.remove('is-targeted')
-      commitDrop(tile, detail.withEl)
+      tile.addEventListener('pointerup', stop, { once: true })
+      tile.addEventListener('pointercancel', stop, { once: true })
     })
   }
 }
 
-function commitDrop(tile: HTMLElement, target: HTMLElement): void {
+function detachFromPalette(tile: HTMLElement, value: DemoValue): void {
+  if (!palette?.contains(tile)) return
+
+  const rect = tile.getBoundingClientRect()
+  const replacement = createShapeButton(
+    tile.dataset.valueId ?? valueId(value),
+    tile.getAttribute('aria-label') ?? value,
+    value
+  )
+
+  tile.replaceWith(replacement)
+  tile.dataset.detached = 'true'
+  tile.style.position = 'fixed'
+  tile.style.left = `${rect.left}px`
+  tile.style.top = `${rect.top}px`
+  tile.style.width = `${rect.width}px`
+  tile.style.height = `${rect.height}px`
+  tile.style.margin = '0'
+  tile.style.transform = ''
+  document.body.append(tile)
+  wireFreeDragging()
+}
+
+function syncShapeMembership(
+  tile: HTMLElement,
+  blockedReplicas = new Set<string>()
+): void {
   const value = readTileValue(tile)
-  if (!value) {
-    render()
-    return
-  }
+  if (!value) return
 
-  const source = tile.dataset.source ?? ''
-  const replicaId = target.dataset.replicaId
+  for (const replica of replicas) {
+    const card = replicaCard(replica.id)
+    if (!card) continue
 
-  if (target.dataset.dropTarget === 'remove') {
-    const replica = replicas.find((candidate) => candidate.id === source)
-    if (replica) {
-      replica.set.delete(value)
+    const inside = intersects(tile, card)
+    const blocked = blockedReplicas.has(replica.id)
+    if (!blocked) {
+      if (inside) replica.set.add(value)
+      else replica.set.delete(value)
     }
-    render()
-    return
+
+    card.classList.toggle('has-overlap', inside && !blocked)
+    card.classList.toggle('is-repelling', inside && blocked)
+    updateReplicaCard(replica)
   }
 
-  const replica = replicas.find((candidate) => candidate.id === replicaId)
-  if (replica) {
-    replica.set.add(value)
+  updateStatus()
+}
+
+function duplicateReplicasFor(
+  tile: HTMLElement,
+  value: DemoValue
+): Set<string> {
+  const blocked = new Set<string>()
+  for (const replica of replicas) {
+    const card = replicaCard(replica.id)
+    if (card && replica.set.has(value) && !intersects(tile, card)) {
+      blocked.add(replica.id)
+    }
   }
-  render()
+  return blocked
+}
+
+function repelFrom(tile: HTMLElement, card: HTMLElement): void {
+  const tileRect = tile.getBoundingClientRect()
+  const cardRect = card.getBoundingClientRect()
+  const pushes = [
+    { x: cardRect.left - tileRect.right - 8, y: 0 },
+    { x: cardRect.right - tileRect.left + 8, y: 0 },
+    { x: 0, y: cardRect.top - tileRect.bottom - 8 },
+    { x: 0, y: cardRect.bottom - tileRect.top + 8 },
+  ]
+  const push = pushes.reduce((closest, candidate) =>
+    Math.abs(candidate.x) + Math.abs(candidate.y) <
+    Math.abs(closest.x) + Math.abs(closest.y)
+      ? candidate
+      : closest
+  )
+  const x = Number(tile.dataset.x ?? 0) + push.x
+  const y = Number(tile.dataset.y ?? 0) + push.y
+  const from = tile.style.transform || 'none'
+  const to = `translate(${x}px, ${y}px)`
+
+  tile.dataset.x = String(x)
+  tile.dataset.y = String(y)
+  tile.classList.add('is-repelling')
+  tile.style.transform = to
+  void tile.animate([{ transform: from }, { transform: to }], {
+    duration: 140,
+    easing: 'ease-out',
+  })
+  window.setTimeout(() => tile.classList.remove('is-repelling'), 180)
 }
 
 async function gossip(): Promise<void> {
   if (gossiping) return
   gossiping = true
   gossipButton?.toggleAttribute('disabled', true)
-  setStatus('gossiping snapshots between replicas')
 
   const snapshots = replicas.map((replica) => ({
     source: replica,
@@ -205,12 +260,13 @@ async function gossip(): Promise<void> {
     deliveries.map(async (delivery, index) => {
       await animatePacket(delivery.source.id, delivery.target.id, index)
       delivery.target.set.merge(delivery.snapshot)
+      updateReplicaCard(delivery.target)
     })
   )
 
   gossiping = false
   gossipButton?.toggleAttribute('disabled', false)
-  render()
+  updateStatus()
 }
 
 function animatePacket(
@@ -218,12 +274,8 @@ function animatePacket(
   targetId: string,
   index: number
 ): Promise<void> {
-  const source = document.querySelector<HTMLElement>(
-    `[data-replica-id="${sourceId}"]`
-  )
-  const target = document.querySelector<HTMLElement>(
-    `[data-replica-id="${targetId}"]`
-  )
+  const source = replicaCard(sourceId)
+  const target = replicaCard(targetId)
   if (!source || !target) return Promise.resolve()
 
   const sourceRect = source.getBoundingClientRect()
@@ -259,35 +311,62 @@ function animatePacket(
   })
 }
 
-function updateStatus(): void {
-  if (!demo) return
-  const projections = replicas.map((replica) => projection(replica.set))
-  const [first = ''] = projections
-  const converged = projections.every((projection) => projection === first)
-  const unionSize = new Set(
-    replicas.flatMap((replica) => replica.set.values().map(valueId))
-  ).size
-  const duplicateVisible = replicas.some(
-    (replica) => replica.set.size < replica.set.toJSON().values.length
-  )
-
-  demo.dataset.converged = String(converged)
-  setStatus(
-    converged
-      ? `converged: ${unionSize} unique visible shapes`
-      : `diverged: ${unionSize} unique shapes across ${replicas.length} replicas`
-  )
-
-  const dedup = document.querySelector<HTMLElement>('[data-dedup]')
-  if (dedup) {
-    dedup.textContent = duplicateVisible
-      ? 'same content has one visible member'
-      : 'duplicate drops stay no-op'
+function updateReplicaCard(replica: Replica): void {
+  const card = replicaCard(replica.id)
+  const count = card?.querySelector<HTMLElement>('.replica-count')
+  const stats = card?.querySelector<HTMLElement>('.replica-stats')
+  const snapshot = replica.set.toJSON()
+  if (count) count.textContent = `${replica.set.size} live`
+  if (stats) {
+    stats.textContent = `${snapshot.values.length} values / ${snapshot.tombstones.length} tombstones`
   }
 }
 
-function setStatus(message: string): void {
-  if (statusEl) statusEl.textContent = message
+function updateStatus(): void {
+  if (!demo) return
+  const projections = replicas.map((replica) => projection(replica.set))
+  const [first] = projections
+  const converged = first
+    ? projections.every((candidate) => sameMembers(candidate, first))
+    : true
+  const unionSize = new Set(
+    replicas.flatMap((replica) => replica.set.values().map(valueId))
+  ).size
+  demo.dataset.converged = String(converged)
+  demo.dataset.visible = String(unionSize)
+}
+
+function clearTargeting(): void {
+  for (const target of document.querySelectorAll<HTMLElement>(
+    '.is-targeted, .is-repelling, .has-overlap'
+  )) {
+    target.classList.remove('is-targeted', 'is-repelling', 'has-overlap')
+  }
+}
+
+function replicaCards(): Array<HTMLElement> {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>('.replica-card[data-replica-id]')
+  )
+}
+
+function replicaCard(id: string): HTMLElement | undefined {
+  return (
+    document.querySelector<HTMLElement>(
+      `.replica-card[data-replica-id="${id}"]`
+    ) ?? undefined
+  )
+}
+
+function intersects(left: HTMLElement, right: HTMLElement): boolean {
+  const leftRect = left.getBoundingClientRect()
+  const rightRect = right.getBoundingClientRect()
+  return !(
+    leftRect.right < rightRect.left ||
+    leftRect.left > rightRect.right ||
+    leftRect.bottom < rightRect.top ||
+    leftRect.top > rightRect.bottom
+  )
 }
 
 function readTileValue(tile: HTMLElement): DemoValue | undefined {
@@ -295,16 +374,18 @@ function readTileValue(tile: HTMLElement): DemoValue | undefined {
   return isDemoValue(value) ? value : undefined
 }
 
-function projection(set: CRSet<DemoValue>): string {
-  return set.values().map(valueId).sort().join('|')
+function projection(set: CRSet<DemoValue>): Set<string> {
+  return new Set(set.values().map(valueId))
 }
 
 function valueId(value: DemoValue): string {
   return value
 }
 
-function compareValues(left: DemoValue, right: DemoValue): number {
-  return valueId(left).localeCompare(valueId(right))
+function sameMembers(left: Set<string>, right: Set<string>): boolean {
+  if (left.size !== right.size) return false
+  for (const value of left) if (!right.has(value)) return false
+  return true
 }
 
 function isDemoValue(value: string | undefined): value is DemoValue {

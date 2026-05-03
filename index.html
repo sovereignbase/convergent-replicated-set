@@ -76,6 +76,8 @@
         font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
         background: #000;
         color: #fff;
+        --tile-width: 3rem;
+        --tile-height: 2.65rem;
       }
 
       * {
@@ -188,20 +190,8 @@
         cursor: progress;
       }
 
-      .status-row {
-        display: grid;
-        gap: 0.5rem;
-        color: rgba(255, 255, 255, 0.76);
-        line-height: 1.4;
-      }
-
-      .status {
-        color: #fff;
-      }
-
       .palette,
-      .replicas,
-      .remove-target {
+      .replicas {
         border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.03);
@@ -210,27 +200,38 @@
       .palette {
         display: flex;
         flex-wrap: wrap;
+        justify-content: center;
         gap: 0.65rem;
-        min-height: 4.5rem;
+        height: 4.5rem;
         padding: 0.75rem;
       }
 
       .item-tile {
         display: inline-flex;
+        flex: 0 0 var(--tile-width);
         align-items: center;
         justify-content: center;
-        min-width: 3rem;
-        min-height: 2.65rem;
-        padding: 0.65rem 0.8rem;
+        width: var(--tile-width);
+        height: var(--tile-height);
+        padding: 0;
+        border-radius: 999px;
+      }
+
+      .item-tile {
         border: 1px solid rgba(255, 255, 255, 0.2);
         background: #050505;
         color: #fff;
         cursor: grab;
+        touch-action: none;
         user-select: none;
       }
 
       .item-tile:active {
         cursor: grabbing;
+      }
+
+      .item-tile.is-repelling {
+        border-color: #fff;
       }
 
       .shape {
@@ -244,6 +245,7 @@
 
       .shape-circle {
         border-radius: 50%;
+        background: #fff;
       }
 
       .shape-triangle {
@@ -265,13 +267,16 @@
         display: grid;
         gap: 0.75rem;
         padding: 0.75rem;
+        grid-template-columns: minmax(0, 1fr);
       }
 
       .replica-card {
+        position: relative;
         display: grid;
-        gap: 0.8rem;
-        min-height: 10rem;
-        padding: 0.8rem;
+        grid-template-rows: auto auto;
+        gap: 0.55rem;
+        min-height: 5.25rem;
+        padding: 0.65rem;
         border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 8px;
         background: #050505;
@@ -281,12 +286,15 @@
       }
 
       .replica-card.is-targeted,
-      .remove-target.is-targeted {
+      .replica-card.has-overlap,
+      .replica-card.is-repelling {
         border-color: #fff;
         background: rgba(255, 255, 255, 0.08);
       }
 
       .replica-heading {
+        position: relative;
+        z-index: 1;
         display: flex;
         align-items: baseline;
         justify-content: space-between;
@@ -303,24 +311,7 @@
       .empty {
         color: rgba(255, 255, 255, 0.62);
         font-family: 'IBM Plex Mono', 'Cascadia Code', monospace;
-        font-size: 0.82rem;
-      }
-
-      .replica-items {
-        display: flex;
-        flex-wrap: wrap;
-        align-content: flex-start;
-        gap: 0.55rem;
-        min-height: 3rem;
-      }
-
-      .remove-target {
-        display: grid;
-        place-items: center;
-        min-height: 5rem;
-        padding: 1rem;
-        color: rgba(255, 255, 255, 0.72);
-        text-align: center;
+        font-size: 0.75rem;
       }
 
       .gossip-packet {
@@ -350,10 +341,6 @@
 
         .shell {
           padding: 1.75rem;
-        }
-
-        .status-row {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
 
@@ -407,42 +394,89 @@
 
         <h1>Convergent Replicated Set</h1>
         <p class="lede">
-          Drag shapes into either replica, remove members from one replica,
-          duplicate the same content, then merge and watch the visible set
-          converge.
+          Drag shapes into either replica, throw replica members outside the
+          board to remove them, then merge and watch the visible set converge.
         </p>
 
         <section class="demo" data-crset-demo data-converged="true">
+          <section class="palette" aria-label="Available shapes" data-palette>
+            <button
+              class="item-tile"
+              type="button"
+              data-tile="true"
+              data-value-id="circle"
+              data-source="palette"
+              data-value="circle"
+              aria-label="circle"
+            >
+              <span class="shape shape-circle" aria-hidden="true"></span>
+            </button>
+            <button
+              class="item-tile"
+              type="button"
+              data-tile="true"
+              data-value-id="square"
+              data-source="palette"
+              data-value="square"
+              aria-label="square"
+            >
+              <span class="shape shape-square" aria-hidden="true"></span>
+            </button>
+            <button
+              class="item-tile"
+              type="button"
+              data-tile="true"
+              data-value-id="triangle"
+              data-source="palette"
+              data-value="triangle"
+              aria-label="triangle"
+            >
+              <span class="shape shape-triangle" aria-hidden="true"></span>
+            </button>
+            <button
+              class="item-tile"
+              type="button"
+              data-tile="true"
+              data-value-id="diamond"
+              data-source="palette"
+              data-value="diamond"
+              aria-label="diamond"
+            >
+              <span class="shape shape-diamond" aria-hidden="true"></span>
+            </button>
+          </section>
+
+          <div class="workspace">
+            <section class="replicas" aria-label="Replicas" data-replicas>
+              <section
+                class="replica-card"
+                data-replica-id="replica-1"
+                aria-label="replica 1"
+              >
+                <div class="replica-heading">
+                  <h2>replica 1</h2>
+                  <span class="replica-count">0 live</span>
+                </div>
+                <p class="replica-stats">0 values / 0 tombstones</p>
+              </section>
+              <section
+                class="replica-card"
+                data-replica-id="replica-2"
+                aria-label="replica 2"
+              >
+                <div class="replica-heading">
+                  <h2>replica 2</h2>
+                  <span class="replica-count">0 live</span>
+                </div>
+                <p class="replica-stats">0 values / 0 tombstones</p>
+              </section>
+            </section>
+          </div>
+
           <div class="actions" aria-label="Demo actions">
             <button class="action" type="button" data-action="gossip">
               merge
             </button>
-          </div>
-
-          <div class="status-row" aria-live="polite">
-            <p class="status" data-status></p>
-            <p data-dedup></p>
-          </div>
-
-          <section
-            class="palette"
-            aria-label="Available shapes"
-            data-palette
-          ></section>
-
-          <div class="workspace">
-            <section
-              class="replicas"
-              aria-label="Replicas"
-              data-replicas
-            ></section>
-            <aside
-              class="remove-target"
-              data-remove-target
-              data-drop-target="remove"
-            >
-              drop replica items here to delete locally
-            </aside>
           </div>
         </section>
       </section>

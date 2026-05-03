@@ -3,8 +3,16 @@
   "license": "Apache-2.0",
   "name": "@sovereignbase/convergent-replicated-set",
   "version": "0.0.0",
-  "description": "",
+  "description": "Convergent Replicated Set (CR-Set) , a delta CRDT for unordered, duplicate-free collections.",
   "keywords": [
+    "crdt",
+    "set",
+    "replicated",
+    "convergent",
+    "local-first",
+    "distributed-systems",
+    "delta-sync",
+    "gossip",
     "typescript",
     "sovereignbase"
   ],
