@@ -735,7 +735,60 @@ function utf8Encode(str, output, outputOffset) {
     utf8EncodeJs(str, output, outputOffset);
   }
 }
+var CHUNK_SIZE = 4096;
+function utf8DecodeJs(bytes, inputOffset, byteLength) {
+  let offset = inputOffset;
+  const end = offset + byteLength;
+  const units = [];
+  let result = "";
+  while (offset < end) {
+    const byte1 = bytes[offset++];
+    if ((byte1 & 128) === 0) {
+      units.push(byte1);
+    } else if ((byte1 & 224) === 192) {
+      const byte2 = bytes[offset++] & 63;
+      units.push((byte1 & 31) << 6 | byte2);
+    } else if ((byte1 & 240) === 224) {
+      const byte2 = bytes[offset++] & 63;
+      const byte3 = bytes[offset++] & 63;
+      units.push((byte1 & 31) << 12 | byte2 << 6 | byte3);
+    } else if ((byte1 & 248) === 240) {
+      const byte2 = bytes[offset++] & 63;
+      const byte3 = bytes[offset++] & 63;
+      const byte4 = bytes[offset++] & 63;
+      let unit = (byte1 & 7) << 18 | byte2 << 12 | byte3 << 6 | byte4;
+      if (unit > 65535) {
+        unit -= 65536;
+        units.push(unit >>> 10 & 1023 | 55296);
+        unit = 56320 | unit & 1023;
+      }
+      units.push(unit);
+    } else {
+      units.push(byte1);
+    }
+    if (units.length >= CHUNK_SIZE) {
+      result += String.fromCharCode(...units);
+      units.length = 0;
+    }
+  }
+  if (units.length > 0) {
+    result += String.fromCharCode(...units);
+  }
+  return result;
+}
 var sharedTextDecoder = new TextDecoder();
+var TEXT_DECODER_THRESHOLD = 200;
+function utf8DecodeTD(bytes, inputOffset, byteLength) {
+  const stringBytes = bytes.subarray(inputOffset, inputOffset + byteLength);
+  return sharedTextDecoder.decode(stringBytes);
+}
+function utf8Decode(bytes, inputOffset, byteLength) {
+  if (byteLength > TEXT_DECODER_THRESHOLD) {
+    return utf8DecodeTD(bytes, inputOffset, byteLength);
+  } else {
+    return utf8DecodeJs(bytes, inputOffset, byteLength);
+  }
+}
 
 // node_modules/@msgpack/msgpack/dist.esm/ExtData.mjs
 var ExtData = class {
@@ -762,6 +815,7 @@ var DecodeError = class _DecodeError extends Error {
 };
 
 // node_modules/@msgpack/msgpack/dist.esm/utils/int.mjs
+var UINT32_MAX = 4294967295;
 function setUint64(view, offset, value) {
   const high = value / 4294967296;
   const low = value;
@@ -776,6 +830,11 @@ function setInt64(view, offset, value) {
 }
 function getInt64(view, offset) {
   const high = view.getInt32(offset);
+  const low = view.getUint32(offset + 4);
+  return high * 4294967296 + low;
+}
+function getUint64(view, offset) {
+  const high = view.getUint32(offset);
   const low = view.getUint32(offset + 4);
   return high * 4294967296 + low;
 }
@@ -876,14 +935,14 @@ var ExtensionCodec = class _ExtensionCodec {
   constructor() {
     this.register(timestampExtension);
   }
-  register({ type, encode: encode2, decode }) {
+  register({ type, encode: encode2, decode: decode2 }) {
     if (type >= 0) {
       this.encoders[type] = encode2;
-      this.decoders[type] = decode;
+      this.decoders[type] = decode2;
     } else {
       const index = -1 - type;
       this.builtInEncoders[index] = encode2;
-      this.builtInDecoders[index] = decode;
+      this.builtInDecoders[index] = decode2;
     }
   }
   tryToEncode(object, context) {
@@ -1345,6 +1404,701 @@ var Encoder = class _Encoder {
 function encode(value, options) {
   const encoder = new Encoder(options);
   return encoder.encodeSharedRef(value);
+}
+
+// node_modules/@msgpack/msgpack/dist.esm/utils/prettyByte.mjs
+function prettyByte(byte) {
+  return `${byte < 0 ? "-" : ""}0x${Math.abs(byte).toString(16).padStart(2, "0")}`;
+}
+
+// node_modules/@msgpack/msgpack/dist.esm/CachedKeyDecoder.mjs
+var DEFAULT_MAX_KEY_LENGTH = 16;
+var DEFAULT_MAX_LENGTH_PER_KEY = 16;
+var CachedKeyDecoder = class {
+  hit = 0;
+  miss = 0;
+  caches;
+  maxKeyLength;
+  maxLengthPerKey;
+  constructor(maxKeyLength = DEFAULT_MAX_KEY_LENGTH, maxLengthPerKey = DEFAULT_MAX_LENGTH_PER_KEY) {
+    this.maxKeyLength = maxKeyLength;
+    this.maxLengthPerKey = maxLengthPerKey;
+    this.caches = [];
+    for (let i = 0; i < this.maxKeyLength; i++) {
+      this.caches.push([]);
+    }
+  }
+  canBeCached(byteLength) {
+    return byteLength > 0 && byteLength <= this.maxKeyLength;
+  }
+  find(bytes, inputOffset, byteLength) {
+    const records = this.caches[byteLength - 1];
+    FIND_CHUNK: for (const record of records) {
+      const recordBytes = record.bytes;
+      for (let j = 0; j < byteLength; j++) {
+        if (recordBytes[j] !== bytes[inputOffset + j]) {
+          continue FIND_CHUNK;
+        }
+      }
+      return record.str;
+    }
+    return null;
+  }
+  store(bytes, value) {
+    const records = this.caches[bytes.length - 1];
+    const record = { bytes, str: value };
+    if (records.length >= this.maxLengthPerKey) {
+      records[Math.random() * records.length | 0] = record;
+    } else {
+      records.push(record);
+    }
+  }
+  decode(bytes, inputOffset, byteLength) {
+    const cachedValue = this.find(bytes, inputOffset, byteLength);
+    if (cachedValue != null) {
+      this.hit++;
+      return cachedValue;
+    }
+    this.miss++;
+    const str = utf8DecodeJs(bytes, inputOffset, byteLength);
+    const slicedCopyOfBytes = Uint8Array.prototype.slice.call(bytes, inputOffset, inputOffset + byteLength);
+    this.store(slicedCopyOfBytes, str);
+    return str;
+  }
+};
+
+// node_modules/@msgpack/msgpack/dist.esm/Decoder.mjs
+var STATE_ARRAY = "array";
+var STATE_MAP_KEY = "map_key";
+var STATE_MAP_VALUE = "map_value";
+var mapKeyConverter = (key) => {
+  if (typeof key === "string" || typeof key === "number") {
+    return key;
+  }
+  throw new DecodeError("The type of key must be string or number but " + typeof key);
+};
+var StackPool = class {
+  stack = [];
+  stackHeadPosition = -1;
+  get length() {
+    return this.stackHeadPosition + 1;
+  }
+  top() {
+    return this.stack[this.stackHeadPosition];
+  }
+  pushArrayState(size) {
+    const state = this.getUninitializedStateFromPool();
+    state.type = STATE_ARRAY;
+    state.position = 0;
+    state.size = size;
+    state.array = new Array(size);
+  }
+  pushMapState(size) {
+    const state = this.getUninitializedStateFromPool();
+    state.type = STATE_MAP_KEY;
+    state.readCount = 0;
+    state.size = size;
+    state.map = {};
+  }
+  getUninitializedStateFromPool() {
+    this.stackHeadPosition++;
+    if (this.stackHeadPosition === this.stack.length) {
+      const partialState = {
+        type: void 0,
+        size: 0,
+        array: void 0,
+        position: 0,
+        readCount: 0,
+        map: void 0,
+        key: null
+      };
+      this.stack.push(partialState);
+    }
+    return this.stack[this.stackHeadPosition];
+  }
+  release(state) {
+    const topStackState = this.stack[this.stackHeadPosition];
+    if (topStackState !== state) {
+      throw new Error("Invalid stack state. Released state is not on top of the stack.");
+    }
+    if (state.type === STATE_ARRAY) {
+      const partialState = state;
+      partialState.size = 0;
+      partialState.array = void 0;
+      partialState.position = 0;
+      partialState.type = void 0;
+    }
+    if (state.type === STATE_MAP_KEY || state.type === STATE_MAP_VALUE) {
+      const partialState = state;
+      partialState.size = 0;
+      partialState.map = void 0;
+      partialState.readCount = 0;
+      partialState.type = void 0;
+    }
+    this.stackHeadPosition--;
+  }
+  reset() {
+    this.stack.length = 0;
+    this.stackHeadPosition = -1;
+  }
+};
+var HEAD_BYTE_REQUIRED = -1;
+var EMPTY_VIEW = new DataView(new ArrayBuffer(0));
+var EMPTY_BYTES = new Uint8Array(EMPTY_VIEW.buffer);
+try {
+  EMPTY_VIEW.getInt8(0);
+} catch (e) {
+  if (!(e instanceof RangeError)) {
+    throw new Error("This module is not supported in the current JavaScript engine because DataView does not throw RangeError on out-of-bounds access");
+  }
+}
+var MORE_DATA = new RangeError("Insufficient data");
+var sharedCachedKeyDecoder = new CachedKeyDecoder();
+var Decoder = class _Decoder {
+  extensionCodec;
+  context;
+  useBigInt64;
+  rawStrings;
+  maxStrLength;
+  maxBinLength;
+  maxArrayLength;
+  maxMapLength;
+  maxExtLength;
+  keyDecoder;
+  mapKeyConverter;
+  totalPos = 0;
+  pos = 0;
+  view = EMPTY_VIEW;
+  bytes = EMPTY_BYTES;
+  headByte = HEAD_BYTE_REQUIRED;
+  stack = new StackPool();
+  entered = false;
+  constructor(options) {
+    this.extensionCodec = options?.extensionCodec ?? ExtensionCodec.defaultCodec;
+    this.context = options?.context;
+    this.useBigInt64 = options?.useBigInt64 ?? false;
+    this.rawStrings = options?.rawStrings ?? false;
+    this.maxStrLength = options?.maxStrLength ?? UINT32_MAX;
+    this.maxBinLength = options?.maxBinLength ?? UINT32_MAX;
+    this.maxArrayLength = options?.maxArrayLength ?? UINT32_MAX;
+    this.maxMapLength = options?.maxMapLength ?? UINT32_MAX;
+    this.maxExtLength = options?.maxExtLength ?? UINT32_MAX;
+    this.keyDecoder = options?.keyDecoder !== void 0 ? options.keyDecoder : sharedCachedKeyDecoder;
+    this.mapKeyConverter = options?.mapKeyConverter ?? mapKeyConverter;
+  }
+  clone() {
+    return new _Decoder({
+      extensionCodec: this.extensionCodec,
+      context: this.context,
+      useBigInt64: this.useBigInt64,
+      rawStrings: this.rawStrings,
+      maxStrLength: this.maxStrLength,
+      maxBinLength: this.maxBinLength,
+      maxArrayLength: this.maxArrayLength,
+      maxMapLength: this.maxMapLength,
+      maxExtLength: this.maxExtLength,
+      keyDecoder: this.keyDecoder
+    });
+  }
+  reinitializeState() {
+    this.totalPos = 0;
+    this.headByte = HEAD_BYTE_REQUIRED;
+    this.stack.reset();
+  }
+  setBuffer(buffer) {
+    const bytes = ensureUint8Array(buffer);
+    this.bytes = bytes;
+    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    this.pos = 0;
+  }
+  appendBuffer(buffer) {
+    if (this.headByte === HEAD_BYTE_REQUIRED && !this.hasRemaining(1)) {
+      this.setBuffer(buffer);
+    } else {
+      const remainingData = this.bytes.subarray(this.pos);
+      const newData = ensureUint8Array(buffer);
+      const newBuffer = new Uint8Array(remainingData.length + newData.length);
+      newBuffer.set(remainingData);
+      newBuffer.set(newData, remainingData.length);
+      this.setBuffer(newBuffer);
+    }
+  }
+  hasRemaining(size) {
+    return this.view.byteLength - this.pos >= size;
+  }
+  createExtraByteError(posToShow) {
+    const { view, pos } = this;
+    return new RangeError(`Extra ${view.byteLength - pos} of ${view.byteLength} byte(s) found at buffer[${posToShow}]`);
+  }
+  /**
+   * @throws {@link DecodeError}
+   * @throws {@link RangeError}
+   */
+  decode(buffer) {
+    if (this.entered) {
+      const instance = this.clone();
+      return instance.decode(buffer);
+    }
+    try {
+      this.entered = true;
+      this.reinitializeState();
+      this.setBuffer(buffer);
+      const object = this.doDecodeSync();
+      if (this.hasRemaining(1)) {
+        throw this.createExtraByteError(this.pos);
+      }
+      return object;
+    } finally {
+      this.entered = false;
+    }
+  }
+  *decodeMulti(buffer) {
+    if (this.entered) {
+      const instance = this.clone();
+      yield* instance.decodeMulti(buffer);
+      return;
+    }
+    try {
+      this.entered = true;
+      this.reinitializeState();
+      this.setBuffer(buffer);
+      while (this.hasRemaining(1)) {
+        yield this.doDecodeSync();
+      }
+    } finally {
+      this.entered = false;
+    }
+  }
+  async decodeAsync(stream) {
+    if (this.entered) {
+      const instance = this.clone();
+      return instance.decodeAsync(stream);
+    }
+    try {
+      this.entered = true;
+      let decoded = false;
+      let object;
+      for await (const buffer of stream) {
+        if (decoded) {
+          this.entered = false;
+          throw this.createExtraByteError(this.totalPos);
+        }
+        this.appendBuffer(buffer);
+        try {
+          object = this.doDecodeSync();
+          decoded = true;
+        } catch (e) {
+          if (!(e instanceof RangeError)) {
+            throw e;
+          }
+        }
+        this.totalPos += this.pos;
+      }
+      if (decoded) {
+        if (this.hasRemaining(1)) {
+          throw this.createExtraByteError(this.totalPos);
+        }
+        return object;
+      }
+      const { headByte, pos, totalPos } = this;
+      throw new RangeError(`Insufficient data in parsing ${prettyByte(headByte)} at ${totalPos} (${pos} in the current buffer)`);
+    } finally {
+      this.entered = false;
+    }
+  }
+  decodeArrayStream(stream) {
+    return this.decodeMultiAsync(stream, true);
+  }
+  decodeStream(stream) {
+    return this.decodeMultiAsync(stream, false);
+  }
+  async *decodeMultiAsync(stream, isArray) {
+    if (this.entered) {
+      const instance = this.clone();
+      yield* instance.decodeMultiAsync(stream, isArray);
+      return;
+    }
+    try {
+      this.entered = true;
+      let isArrayHeaderRequired = isArray;
+      let arrayItemsLeft = -1;
+      for await (const buffer of stream) {
+        if (isArray && arrayItemsLeft === 0) {
+          throw this.createExtraByteError(this.totalPos);
+        }
+        this.appendBuffer(buffer);
+        if (isArrayHeaderRequired) {
+          arrayItemsLeft = this.readArraySize();
+          isArrayHeaderRequired = false;
+          this.complete();
+        }
+        try {
+          while (true) {
+            yield this.doDecodeSync();
+            if (--arrayItemsLeft === 0) {
+              break;
+            }
+          }
+        } catch (e) {
+          if (!(e instanceof RangeError)) {
+            throw e;
+          }
+        }
+        this.totalPos += this.pos;
+      }
+    } finally {
+      this.entered = false;
+    }
+  }
+  doDecodeSync() {
+    DECODE: while (true) {
+      const headByte = this.readHeadByte();
+      let object;
+      if (headByte >= 224) {
+        object = headByte - 256;
+      } else if (headByte < 192) {
+        if (headByte < 128) {
+          object = headByte;
+        } else if (headByte < 144) {
+          const size = headByte - 128;
+          if (size !== 0) {
+            this.pushMapState(size);
+            this.complete();
+            continue DECODE;
+          } else {
+            object = {};
+          }
+        } else if (headByte < 160) {
+          const size = headByte - 144;
+          if (size !== 0) {
+            this.pushArrayState(size);
+            this.complete();
+            continue DECODE;
+          } else {
+            object = [];
+          }
+        } else {
+          const byteLength = headByte - 160;
+          object = this.decodeString(byteLength, 0);
+        }
+      } else if (headByte === 192) {
+        object = null;
+      } else if (headByte === 194) {
+        object = false;
+      } else if (headByte === 195) {
+        object = true;
+      } else if (headByte === 202) {
+        object = this.readF32();
+      } else if (headByte === 203) {
+        object = this.readF64();
+      } else if (headByte === 204) {
+        object = this.readU8();
+      } else if (headByte === 205) {
+        object = this.readU16();
+      } else if (headByte === 206) {
+        object = this.readU32();
+      } else if (headByte === 207) {
+        if (this.useBigInt64) {
+          object = this.readU64AsBigInt();
+        } else {
+          object = this.readU64();
+        }
+      } else if (headByte === 208) {
+        object = this.readI8();
+      } else if (headByte === 209) {
+        object = this.readI16();
+      } else if (headByte === 210) {
+        object = this.readI32();
+      } else if (headByte === 211) {
+        if (this.useBigInt64) {
+          object = this.readI64AsBigInt();
+        } else {
+          object = this.readI64();
+        }
+      } else if (headByte === 217) {
+        const byteLength = this.lookU8();
+        object = this.decodeString(byteLength, 1);
+      } else if (headByte === 218) {
+        const byteLength = this.lookU16();
+        object = this.decodeString(byteLength, 2);
+      } else if (headByte === 219) {
+        const byteLength = this.lookU32();
+        object = this.decodeString(byteLength, 4);
+      } else if (headByte === 220) {
+        const size = this.readU16();
+        if (size !== 0) {
+          this.pushArrayState(size);
+          this.complete();
+          continue DECODE;
+        } else {
+          object = [];
+        }
+      } else if (headByte === 221) {
+        const size = this.readU32();
+        if (size !== 0) {
+          this.pushArrayState(size);
+          this.complete();
+          continue DECODE;
+        } else {
+          object = [];
+        }
+      } else if (headByte === 222) {
+        const size = this.readU16();
+        if (size !== 0) {
+          this.pushMapState(size);
+          this.complete();
+          continue DECODE;
+        } else {
+          object = {};
+        }
+      } else if (headByte === 223) {
+        const size = this.readU32();
+        if (size !== 0) {
+          this.pushMapState(size);
+          this.complete();
+          continue DECODE;
+        } else {
+          object = {};
+        }
+      } else if (headByte === 196) {
+        const size = this.lookU8();
+        object = this.decodeBinary(size, 1);
+      } else if (headByte === 197) {
+        const size = this.lookU16();
+        object = this.decodeBinary(size, 2);
+      } else if (headByte === 198) {
+        const size = this.lookU32();
+        object = this.decodeBinary(size, 4);
+      } else if (headByte === 212) {
+        object = this.decodeExtension(1, 0);
+      } else if (headByte === 213) {
+        object = this.decodeExtension(2, 0);
+      } else if (headByte === 214) {
+        object = this.decodeExtension(4, 0);
+      } else if (headByte === 215) {
+        object = this.decodeExtension(8, 0);
+      } else if (headByte === 216) {
+        object = this.decodeExtension(16, 0);
+      } else if (headByte === 199) {
+        const size = this.lookU8();
+        object = this.decodeExtension(size, 1);
+      } else if (headByte === 200) {
+        const size = this.lookU16();
+        object = this.decodeExtension(size, 2);
+      } else if (headByte === 201) {
+        const size = this.lookU32();
+        object = this.decodeExtension(size, 4);
+      } else {
+        throw new DecodeError(`Unrecognized type byte: ${prettyByte(headByte)}`);
+      }
+      this.complete();
+      const stack = this.stack;
+      while (stack.length > 0) {
+        const state = stack.top();
+        if (state.type === STATE_ARRAY) {
+          state.array[state.position] = object;
+          state.position++;
+          if (state.position === state.size) {
+            object = state.array;
+            stack.release(state);
+          } else {
+            continue DECODE;
+          }
+        } else if (state.type === STATE_MAP_KEY) {
+          if (object === "__proto__") {
+            throw new DecodeError("The key __proto__ is not allowed");
+          }
+          state.key = this.mapKeyConverter(object);
+          state.type = STATE_MAP_VALUE;
+          continue DECODE;
+        } else {
+          state.map[state.key] = object;
+          state.readCount++;
+          if (state.readCount === state.size) {
+            object = state.map;
+            stack.release(state);
+          } else {
+            state.key = null;
+            state.type = STATE_MAP_KEY;
+            continue DECODE;
+          }
+        }
+      }
+      return object;
+    }
+  }
+  readHeadByte() {
+    if (this.headByte === HEAD_BYTE_REQUIRED) {
+      this.headByte = this.readU8();
+    }
+    return this.headByte;
+  }
+  complete() {
+    this.headByte = HEAD_BYTE_REQUIRED;
+  }
+  readArraySize() {
+    const headByte = this.readHeadByte();
+    switch (headByte) {
+      case 220:
+        return this.readU16();
+      case 221:
+        return this.readU32();
+      default: {
+        if (headByte < 160) {
+          return headByte - 144;
+        } else {
+          throw new DecodeError(`Unrecognized array type byte: ${prettyByte(headByte)}`);
+        }
+      }
+    }
+  }
+  pushMapState(size) {
+    if (size > this.maxMapLength) {
+      throw new DecodeError(`Max length exceeded: map length (${size}) > maxMapLengthLength (${this.maxMapLength})`);
+    }
+    this.stack.pushMapState(size);
+  }
+  pushArrayState(size) {
+    if (size > this.maxArrayLength) {
+      throw new DecodeError(`Max length exceeded: array length (${size}) > maxArrayLength (${this.maxArrayLength})`);
+    }
+    this.stack.pushArrayState(size);
+  }
+  decodeString(byteLength, headerOffset) {
+    if (!this.rawStrings || this.stateIsMapKey()) {
+      return this.decodeUtf8String(byteLength, headerOffset);
+    }
+    return this.decodeBinary(byteLength, headerOffset);
+  }
+  /**
+   * @throws {@link RangeError}
+   */
+  decodeUtf8String(byteLength, headerOffset) {
+    if (byteLength > this.maxStrLength) {
+      throw new DecodeError(`Max length exceeded: UTF-8 byte length (${byteLength}) > maxStrLength (${this.maxStrLength})`);
+    }
+    if (this.bytes.byteLength < this.pos + headerOffset + byteLength) {
+      throw MORE_DATA;
+    }
+    const offset = this.pos + headerOffset;
+    let object;
+    if (this.stateIsMapKey() && this.keyDecoder?.canBeCached(byteLength)) {
+      object = this.keyDecoder.decode(this.bytes, offset, byteLength);
+    } else {
+      object = utf8Decode(this.bytes, offset, byteLength);
+    }
+    this.pos += headerOffset + byteLength;
+    return object;
+  }
+  stateIsMapKey() {
+    if (this.stack.length > 0) {
+      const state = this.stack.top();
+      return state.type === STATE_MAP_KEY;
+    }
+    return false;
+  }
+  /**
+   * @throws {@link RangeError}
+   */
+  decodeBinary(byteLength, headOffset) {
+    if (byteLength > this.maxBinLength) {
+      throw new DecodeError(`Max length exceeded: bin length (${byteLength}) > maxBinLength (${this.maxBinLength})`);
+    }
+    if (!this.hasRemaining(byteLength + headOffset)) {
+      throw MORE_DATA;
+    }
+    const offset = this.pos + headOffset;
+    const object = this.bytes.subarray(offset, offset + byteLength);
+    this.pos += headOffset + byteLength;
+    return object;
+  }
+  decodeExtension(size, headOffset) {
+    if (size > this.maxExtLength) {
+      throw new DecodeError(`Max length exceeded: ext length (${size}) > maxExtLength (${this.maxExtLength})`);
+    }
+    const extType = this.view.getInt8(this.pos + headOffset);
+    const data = this.decodeBinary(
+      size,
+      headOffset + 1
+      /* extType */
+    );
+    return this.extensionCodec.decode(data, extType, this.context);
+  }
+  lookU8() {
+    return this.view.getUint8(this.pos);
+  }
+  lookU16() {
+    return this.view.getUint16(this.pos);
+  }
+  lookU32() {
+    return this.view.getUint32(this.pos);
+  }
+  readU8() {
+    const value = this.view.getUint8(this.pos);
+    this.pos++;
+    return value;
+  }
+  readI8() {
+    const value = this.view.getInt8(this.pos);
+    this.pos++;
+    return value;
+  }
+  readU16() {
+    const value = this.view.getUint16(this.pos);
+    this.pos += 2;
+    return value;
+  }
+  readI16() {
+    const value = this.view.getInt16(this.pos);
+    this.pos += 2;
+    return value;
+  }
+  readU32() {
+    const value = this.view.getUint32(this.pos);
+    this.pos += 4;
+    return value;
+  }
+  readI32() {
+    const value = this.view.getInt32(this.pos);
+    this.pos += 4;
+    return value;
+  }
+  readU64() {
+    const value = getUint64(this.view, this.pos);
+    this.pos += 8;
+    return value;
+  }
+  readI64() {
+    const value = getInt64(this.view, this.pos);
+    this.pos += 8;
+    return value;
+  }
+  readU64AsBigInt() {
+    const value = this.view.getBigUint64(this.pos);
+    this.pos += 8;
+    return value;
+  }
+  readI64AsBigInt() {
+    const value = this.view.getBigInt64(this.pos);
+    this.pos += 8;
+    return value;
+  }
+  readF32() {
+    const value = this.view.getFloat32(this.pos);
+    this.pos += 4;
+    return value;
+  }
+  readF64() {
+    const value = this.view.getFloat64(this.pos);
+    this.pos += 8;
+    return value;
+  }
+};
+
+// node_modules/@msgpack/msgpack/dist.esm/decode.mjs
+function decode(buffer, options) {
+  const decoder = new Decoder(options);
+  return decoder.decode(buffer);
 }
 
 // node_modules/@noble/hashes/utils.js
@@ -2769,6 +3523,331 @@ function stopWatch(watcher, elementToWatch) {
     delete watcher.dataset.dragonWatches;
 }
 
+// node_modules/@sovereignbase/station-client/dist/index.js
+var StationClient = class {
+  eventTarget = new EventTarget();
+  lockName;
+  channelName;
+  webSocketUrl;
+  instanceId = self.crypto.randomUUID();
+  onlineHandler = () => {
+    void this.opportunisticConnect();
+  };
+  broadcastChannel = null;
+  webSocket = null;
+  isLeader = false;
+  isClosed = false;
+  isConnecting = false;
+  outboundQueue = [];
+  pendingTransacts = /* @__PURE__ */ new Map();
+  pendingTransactTargets = /* @__PURE__ */ new Map();
+  /**
+   * Initializes a new {@link StationClient} instance.
+   *
+   * @param webSocketUrl The base station WebSocket URL. When omitted, the instance operates in local-only mode.
+   */
+  constructor(webSocketUrl = "") {
+    this.webSocketUrl = webSocketUrl;
+    this.channelName = `origin-channel-lock::${this.webSocketUrl}`;
+    this.lockName = `origin-channel-lock::${this.webSocketUrl}`;
+    this.broadcastChannel = new BroadcastChannel(this.channelName);
+    this.broadcastChannel.onmessage = (event) => {
+      const envelope = event.data;
+      if (!envelope) return;
+      if (envelope.kind === "relay") {
+        this.eventTarget.dispatchEvent(
+          new CustomEvent("message", { detail: envelope.message })
+        );
+        if (!this.isLeader) return;
+        this.sendToStation(envelope.message);
+        return;
+      }
+      if (envelope.kind === "transact-response") {
+        if (envelope.target !== this.instanceId) return;
+        const pending = this.pendingTransacts.get(envelope.id);
+        if (!pending) return;
+        this.pendingTransacts.delete(envelope.id);
+        pending.cleanup();
+        pending.resolve(envelope.message);
+        return;
+      }
+      if (envelope.kind === "transact-abort") {
+        if (!this.isLeader) return;
+        const pendingTarget2 = this.pendingTransactTargets.get(envelope.id);
+        if (pendingTarget2) clearTimeout(pendingTarget2.timeoutId);
+        this.pendingTransactTargets.delete(envelope.id);
+        return;
+      }
+      if (!this.isLeader) return;
+      if (!this.webSocketUrl || self.navigator.onLine !== true || !this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
+        this.broadcastChannel?.postMessage({
+          kind: "transact-response",
+          id: envelope.id,
+          target: envelope.source,
+          message: false
+        });
+        return;
+      }
+      const pendingTarget = this.pendingTransactTargets.get(envelope.id);
+      if (pendingTarget) clearTimeout(pendingTarget.timeoutId);
+      this.pendingTransactTargets.set(envelope.id, {
+        target: envelope.source,
+        timeoutId: setTimeout(() => {
+          this.pendingTransactTargets.delete(envelope.id);
+        }, envelope.ttlMs ?? 3e4)
+      });
+      this.sendToStation([
+        "station-client-request",
+        envelope.id,
+        envelope.message
+      ]);
+    };
+    if (this.webSocketUrl && navigator.onLine) void this.opportunisticConnect();
+    if (this.webSocketUrl) {
+      self.addEventListener("online", this.onlineHandler);
+    }
+  }
+  /**main methods*/
+  /**
+   * Broadcasts a message to other same-origin contexts and opportunistically forwards it to the base station.
+   *
+   * @param message The message to broadcast.
+   */
+  relay(message) {
+    if (this.isClosed) return;
+    this.broadcastChannel?.postMessage({ kind: "relay", message });
+    this.sendToStation(message);
+  }
+  /**
+   * Sends a request to the base station and resolves with the corresponding response message.
+   *
+   * @param message The message to send.
+   * @param options Options that control cancellation and stale follower cleanup.
+   * @returns A promise that resolves with the response message, or `false` when the request cannot be issued.
+   */
+  transact(message, options = {}) {
+    if (this.isClosed) return Promise.resolve(false);
+    const id = self.crypto.randomUUID();
+    const { signal, ttlMs } = options;
+    return new Promise((resolve, reject) => {
+      const abortReason = () => signal?.reason ?? new DOMException("The operation was aborted.", "AbortError");
+      if (signal?.aborted) {
+        reject(abortReason());
+        return;
+      }
+      if (!this.webSocketUrl || self.navigator.onLine !== true) {
+        resolve(false);
+        return;
+      }
+      if (this.isLeader && (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN)) {
+        resolve(false);
+        return;
+      }
+      const handleAbort = () => {
+        this.pendingTransacts.delete(id);
+        const pendingTarget = this.pendingTransactTargets.get(id);
+        if (pendingTarget) clearTimeout(pendingTarget.timeoutId);
+        this.pendingTransactTargets.delete(id);
+        signal?.removeEventListener("abort", handleAbort);
+        if (!this.isLeader) {
+          this.broadcastChannel?.postMessage({ kind: "transact-abort", id });
+        }
+        reject(abortReason());
+      };
+      this.pendingTransacts.set(id, {
+        resolve,
+        reject,
+        cleanup: () => {
+          signal?.removeEventListener("abort", handleAbort);
+        }
+      });
+      signal?.addEventListener("abort", handleAbort, { once: true });
+      if (this.isLeader) {
+        this.sendToStation(["station-client-request", id, message]);
+        return;
+      }
+      this.broadcastChannel?.postMessage({
+        kind: "transact",
+        id,
+        source: this.instanceId,
+        ttlMs,
+        message
+      });
+    });
+  }
+  /**
+   * Closes the client and releases its local and remote resources.
+   */
+  close() {
+    const wasLeader = this.isLeader;
+    const broadcastChannel = this.broadcastChannel;
+    this.isClosed = true;
+    self.removeEventListener("online", this.onlineHandler);
+    if (!wasLeader) {
+      for (const id of this.pendingTransacts.keys()) {
+        try {
+          broadcastChannel?.postMessage({ kind: "transact-abort", id });
+        } catch {
+        }
+      }
+    }
+    try {
+      broadcastChannel?.close();
+    } catch {
+    }
+    try {
+      this.webSocket?.close(1e3, "closed");
+    } catch {
+    }
+    this.broadcastChannel = null;
+    this.webSocket = null;
+    this.isLeader = false;
+    this.outboundQueue.length = 0;
+    for (const pending of this.pendingTransacts.values()) {
+      pending.cleanup();
+      pending.reject(new Error("Station client closed"));
+    }
+    this.pendingTransacts.clear();
+    for (const pendingTarget of this.pendingTransactTargets.values()) {
+      clearTimeout(pendingTarget.timeoutId);
+    }
+    this.pendingTransactTargets.clear();
+  }
+  /**listeners*/
+  /**
+   * Appends an event listener for events whose type attribute value is `type`.
+   *
+   * @param type The event type to listen for.
+   * @param listener The callback that receives the event.
+   * @param options An options object that specifies characteristics about the event listener.
+   */
+  addEventListener(type, listener, options) {
+    this.eventTarget.addEventListener(
+      type,
+      listener,
+      options
+    );
+  }
+  /**
+   * Removes an event listener previously registered with {@link addEventListener}.
+   *
+   * @param type The event type to remove.
+   * @param listener The callback to remove.
+   * @param options An options object that specifies characteristics about the event listener.
+   */
+  removeEventListener(type, listener, options) {
+    this.eventTarget.removeEventListener(
+      type,
+      listener,
+      options
+    );
+  }
+  /**helpers*/
+  sendToStation(message) {
+    if (!this.isLeader || !this.webSocketUrl) return;
+    if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
+      if (self.navigator.onLine) {
+        if (this.outboundQueue.length >= 64) this.outboundQueue.shift();
+        this.outboundQueue.push(message);
+      }
+      return;
+    }
+    try {
+      this.webSocket.send(encode(message));
+    } catch {
+    }
+  }
+  flushOutboundQueue() {
+    if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) return;
+    while (this.outboundQueue.length > 0) {
+      const message = this.outboundQueue.shift();
+      if (!message) continue;
+      try {
+        this.webSocket.send(encode(message));
+      } catch {
+        this.outboundQueue.unshift(message);
+        return;
+      }
+    }
+  }
+  async opportunisticConnect() {
+    if (this.isClosed || this.isConnecting || !this.webSocketUrl) return;
+    if (!self.navigator.locks) return;
+    this.isConnecting = true;
+    try {
+      while (!this.isClosed) {
+        if (self.navigator.onLine !== true) return;
+        await self.navigator.locks.request(
+          this.lockName,
+          { ifAvailable: true },
+          async (lockHandle) => {
+            if (!lockHandle || this.isClosed) return;
+            this.isLeader = true;
+            let socket;
+            try {
+              socket = new WebSocket(this.webSocketUrl);
+            } catch {
+              this.isLeader = false;
+              this.webSocket = null;
+              return;
+            }
+            socket.binaryType = "arraybuffer";
+            this.webSocket = socket;
+            socket.onopen = () => {
+              this.flushOutboundQueue();
+            };
+            socket.onmessage = (event) => {
+              const message = decode(event.data);
+              if (!message) return;
+              if (Array.isArray(message) && message[0] === "station-client-response" && typeof message[1] === "string") {
+                const id = message[1];
+                const pendingTarget = this.pendingTransactTargets.get(id);
+                if (pendingTarget) {
+                  clearTimeout(pendingTarget.timeoutId);
+                  this.pendingTransactTargets.delete(id);
+                  this.broadcastChannel?.postMessage({
+                    kind: "transact-response",
+                    id,
+                    target: pendingTarget.target,
+                    message: message[2]
+                  });
+                  return;
+                }
+                const pending = this.pendingTransacts.get(id);
+                if (!pending) return;
+                this.pendingTransacts.delete(id);
+                pending.cleanup();
+                pending.resolve(message[2]);
+                return;
+              }
+              this.eventTarget.dispatchEvent(
+                new CustomEvent("message", { detail: message })
+              );
+              this.broadcastChannel?.postMessage({
+                kind: "relay",
+                message
+              });
+            };
+            socket.onclose = () => {
+              if (this.webSocket === socket) this.webSocket = null;
+              this.isLeader = false;
+            };
+            await new Promise((resolve) => {
+              socket.addEventListener("close", () => resolve(), { once: true });
+            });
+            this.isLeader = false;
+            if (this.webSocket === socket) this.webSocket = null;
+          }
+        );
+        if (this.isClosed || self.navigator.onLine !== true) return;
+        await new Promise((resolve) => setTimeout(resolve, 1e4));
+      }
+    } finally {
+      this.isConnecting = false;
+    }
+  }
+};
+
 // in-browser-testing-libs.ts
 var values = [
   { id: "circle", label: "circle", value: "circle" },
@@ -2782,10 +3861,31 @@ var replicasEl = document.querySelector("[data-replicas]");
 var gossipButton = document.querySelector(
   '[data-action="gossip"]'
 );
+var syncStatus = document.querySelector("[data-sync-status]");
+var station = new StationClient();
 var replicas = createReplicas(2);
+var pendingStationMessages = [];
+var pendingOutgoingMessages = [];
+var isFlushingStationMessages = false;
 var gossiping = false;
 if (demo && palette && replicasEl && gossipButton) {
   gossipButton.addEventListener("click", () => void gossip());
+  for (const replica of replicas) {
+    replica.set.addEventListener("delta", (event) => {
+      if (isFlushingStationMessages) return;
+      pendingOutgoingMessages.push({
+        topic: "convergent-replicated-set:manual-sync",
+        replicaId: replica.id,
+        delta: event.detail
+      });
+      updateStatus();
+    });
+  }
+  station.addEventListener("message", (event) => {
+    if (!isStationSyncMessage(event.detail)) return;
+    pendingStationMessages.push(event.detail);
+    updateStatus();
+  });
   render();
 }
 function createReplicas(count) {
@@ -2991,6 +4091,7 @@ async function gossip() {
   if (gossiping) return;
   gossiping = true;
   gossipButton?.toggleAttribute("disabled", true);
+  flushStationMessages();
   const snapshots = replicas.map((replica) => ({
     source: replica,
     snapshot: replica.set.toJSON()
@@ -3005,9 +4106,26 @@ async function gossip() {
       updateReplicaCard(delivery.target);
     })
   );
+  relayStationDeltas();
   gossiping = false;
   gossipButton?.toggleAttribute("disabled", false);
   updateStatus();
+}
+function flushStationMessages() {
+  isFlushingStationMessages = true;
+  try {
+    for (const message of pendingStationMessages.splice(0)) {
+      replicaById(message.replicaId)?.set.merge(message.delta);
+    }
+  } finally {
+    isFlushingStationMessages = false;
+  }
+  for (const replica of replicas) updateReplicaCard(replica);
+}
+function relayStationDeltas() {
+  for (const message of pendingOutgoingMessages.splice(0)) {
+    station.relay(message);
+  }
 }
 function animatePacket(sourceId, targetId, index) {
   const source = replicaCard(sourceId);
@@ -3059,6 +4177,10 @@ function updateStatus() {
   ).size;
   demo.dataset.converged = String(converged);
   demo.dataset.visible = String(unionSize);
+  demo.dataset.pendingSync = String(pendingStationMessages.length);
+  if (syncStatus) {
+    syncStatus.textContent = `${pendingStationMessages.length} tab deltas pending`;
+  }
 }
 function clearTargeting() {
   for (const target of document.querySelectorAll(
@@ -3124,6 +4246,20 @@ function sameMembers(left, right) {
   if (left.size !== right.size) return false;
   for (const value of left) if (!right.has(value)) return false;
   return true;
+}
+function isStationSyncMessage(value) {
+  return isRecord(value) && value.topic === "convergent-replicated-set:manual-sync" && typeof value.replicaId === "string" && isStationDelta(value.delta);
+}
+function isStationDelta(value) {
+  if (!isRecord(value)) return false;
+  if (value.values !== void 0 && !Array.isArray(value.values)) return false;
+  if (value.tombstones !== void 0 && !Array.isArray(value.tombstones)) {
+    return false;
+  }
+  return value.values !== void 0 || value.tombstones !== void 0;
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
 }
 function isDemoValue(value) {
   return value === "circle" || value === "square" || value === "triangle" || value === "diamond";

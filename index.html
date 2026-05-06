@@ -308,10 +308,16 @@
 
       .replica-count,
       .replica-stats,
-      .empty {
+      .empty,
+      .sync-status {
         color: rgba(255, 255, 255, 0.62);
         font-family: 'IBM Plex Mono', 'Cascadia Code', monospace;
         font-size: 0.75rem;
+      }
+
+      .sync-status {
+        min-height: 1rem;
+        text-align: center;
       }
 
       .replica-members {
@@ -498,6 +504,7 @@
             <button class="action" type="button" data-action="gossip">
               merge
             </button>
+            <p class="sync-status" data-sync-status>0 tab deltas pending</p>
           </div>
         </section>
       </section>

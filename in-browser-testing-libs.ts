@@ -1,5 +1,9 @@
-import { CRSet } from '@sovereignbase/convergent-replicated-set'
+import {
+  CRSet,
+  type CRSetDelta,
+} from '@sovereignbase/convergent-replicated-set'
 import { drag, startWatch, stopWatch } from '@sovereignbase/dragonwatch'
+import { StationClient } from '@sovereignbase/station-client'
 
 type DemoValue = 'circle' | 'square' | 'triangle' | 'diamond'
 
@@ -18,6 +22,12 @@ type ShapeSource =
       readonly replicaId: string
     }
 
+type StationSyncMessage = {
+  readonly topic: 'convergent-replicated-set:manual-sync'
+  readonly replicaId: string
+  readonly delta: CRSetDelta<DemoValue>
+}
+
 const values: Array<{
   readonly id: string
   readonly label: string
@@ -35,12 +45,33 @@ const replicasEl = document.querySelector<HTMLElement>('[data-replicas]')
 const gossipButton = document.querySelector<HTMLButtonElement>(
   '[data-action="gossip"]'
 )
+const syncStatus = document.querySelector<HTMLElement>('[data-sync-status]')
 
+const station = new StationClient<StationSyncMessage>()
 const replicas = createReplicas(2)
+const pendingStationMessages: Array<StationSyncMessage> = []
+const pendingOutgoingMessages: Array<StationSyncMessage> = []
+let isFlushingStationMessages = false
 let gossiping = false
 
 if (demo && palette && replicasEl && gossipButton) {
   gossipButton.addEventListener('click', () => void gossip())
+  for (const replica of replicas) {
+    replica.set.addEventListener('delta', (event) => {
+      if (isFlushingStationMessages) return
+      pendingOutgoingMessages.push({
+        topic: 'convergent-replicated-set:manual-sync',
+        replicaId: replica.id,
+        delta: event.detail,
+      })
+      updateStatus()
+    })
+  }
+  station.addEventListener('message', (event) => {
+    if (!isStationSyncMessage(event.detail)) return
+    pendingStationMessages.push(event.detail)
+    updateStatus()
+  })
   render()
 }
 
@@ -315,6 +346,8 @@ async function gossip(): Promise<void> {
   gossiping = true
   gossipButton?.toggleAttribute('disabled', true)
 
+  flushStationMessages()
+
   const snapshots = replicas.map((replica) => ({
     source: replica,
     snapshot: replica.set.toJSON(),
@@ -333,9 +366,30 @@ async function gossip(): Promise<void> {
     })
   )
 
+  relayStationDeltas()
+
   gossiping = false
   gossipButton?.toggleAttribute('disabled', false)
   updateStatus()
+}
+
+function flushStationMessages(): void {
+  isFlushingStationMessages = true
+  try {
+    for (const message of pendingStationMessages.splice(0)) {
+      replicaById(message.replicaId)?.set.merge(message.delta)
+    }
+  } finally {
+    isFlushingStationMessages = false
+  }
+
+  for (const replica of replicas) updateReplicaCard(replica)
+}
+
+function relayStationDeltas(): void {
+  for (const message of pendingOutgoingMessages.splice(0)) {
+    station.relay(message)
+  }
 }
 
 function animatePacket(
@@ -408,6 +462,10 @@ function updateStatus(): void {
   ).size
   demo.dataset.converged = String(converged)
   demo.dataset.visible = String(unionSize)
+  demo.dataset.pendingSync = String(pendingStationMessages.length)
+  if (syncStatus) {
+    syncStatus.textContent = `${pendingStationMessages.length} tab deltas pending`
+  }
 }
 
 function clearTargeting(): void {
@@ -502,6 +560,28 @@ function sameMembers(left: Set<string>, right: Set<string>): boolean {
   if (left.size !== right.size) return false
   for (const value of left) if (!right.has(value)) return false
   return true
+}
+
+function isStationSyncMessage(value: unknown): value is StationSyncMessage {
+  return (
+    isRecord(value) &&
+    value.topic === 'convergent-replicated-set:manual-sync' &&
+    typeof value.replicaId === 'string' &&
+    isStationDelta(value.delta)
+  )
+}
+
+function isStationDelta(value: unknown): value is CRSetDelta<DemoValue> {
+  if (!isRecord(value)) return false
+  if (value.values !== undefined && !Array.isArray(value.values)) return false
+  if (value.tombstones !== undefined && !Array.isArray(value.tombstones)) {
+    return false
+  }
+  return value.values !== undefined || value.tombstones !== undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function isDemoValue(value: string | undefined): value is DemoValue {
