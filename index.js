@@ -2799,7 +2799,9 @@ function render() {
   if (!palette || !replicasEl) return;
   palette.replaceChildren(
     ...values.map(
-      (entry) => createShapeButton(entry.id, entry.label, entry.value)
+      (entry) => createShapeButton(entry.id, entry.label, entry.value, {
+        kind: "palette"
+      })
     )
   );
   replicasEl.replaceChildren(...replicas.map(createReplicaCard));
@@ -2824,22 +2826,44 @@ function createReplicaCard(replica) {
   const stats = document.createElement("p");
   stats.className = "replica-stats";
   stats.textContent = `${snapshot.values.length} values / ${snapshot.tombstones.length} tombstones`;
-  card.append(heading, stats);
+  const members = document.createElement("div");
+  members.className = "replica-members";
+  members.setAttribute("aria-label", `${replica.label} live values`);
+  renderReplicaMembers(members, replica);
+  card.append(heading, stats, members);
   return card;
 }
-function createShapeButton(id, label, value) {
+function createShapeButton(id, label, value, source) {
   const tile = document.createElement("button");
   tile.type = "button";
   tile.className = "item-tile";
   tile.dataset.tile = "true";
   tile.dataset.valueId = id;
   tile.dataset.value = value;
+  tile.dataset.source = source.kind;
+  if (source.kind === "replica") tile.dataset.replicaId = source.replicaId;
   tile.setAttribute("aria-label", label);
   const shape = document.createElement("span");
   shape.className = `shape shape-${value}`;
   shape.setAttribute("aria-hidden", "true");
   tile.append(shape);
   return tile;
+}
+function renderReplicaMembers(container, replica) {
+  const tiles = values.filter((entry) => replica.set.has(entry.value)).map(
+    (entry) => createShapeButton(entry.id, entry.label, entry.value, {
+      kind: "replica",
+      replicaId: replica.id
+    })
+  );
+  if (tiles.length > 0) {
+    container.replaceChildren(...tiles);
+    return;
+  }
+  const empty = document.createElement("p");
+  empty.className = "empty";
+  empty.textContent = "empty";
+  container.replaceChildren(empty);
 }
 function wireFreeDragging() {
   for (const tile of document.querySelectorAll("[data-tile]")) {
@@ -2848,48 +2872,50 @@ function wireFreeDragging() {
     tile.addEventListener("pointerdown", (event) => {
       const value = readTileValue(tile);
       if (!value) return;
-      detachFromPalette(tile, value);
+      event.preventDefault();
+      const source = readTileSource(tile);
       const watchers = replicaCards();
-      const blockedReplicas = duplicateReplicasFor(tile, value);
+      detachForDrag(tile, source, value);
       for (const watcher of watchers) startWatch(watcher, tile);
       drag(
         event,
         (_dragged, watcher) => {
-          const replicaId = watcher.dataset.replicaId;
-          if (replicaId && blockedReplicas.has(replicaId)) {
-            watcher.classList.add("is-repelling");
-            repelFrom(tile, watcher);
-          } else {
-            watcher.classList.add("is-targeted");
-          }
-          syncShapeMembership(tile, blockedReplicas);
+          markDropTarget(tile, watcher, source, value);
         },
         (_dragged, watcher) => {
           watcher.classList.remove("is-targeted", "is-repelling");
-          syncShapeMembership(tile, blockedReplicas);
-        },
-        () => syncShapeMembership(tile, blockedReplicas)
+        }
       );
+      let settled = false;
       const stop = () => {
+        if (settled) return;
+        settled = true;
         for (const watcher of watchers) stopWatch(watcher, tile);
+        const targetReplicaId = dropReplicaFor(tile)?.dataset.replicaId;
+        tile.remove();
         clearTargeting();
-        syncShapeMembership(tile, blockedReplicas);
+        applyDrop(value, source, targetReplicaId);
+        render();
       };
       tile.addEventListener("pointerup", stop, { once: true });
       tile.addEventListener("pointercancel", stop, { once: true });
     });
   }
 }
-function detachFromPalette(tile, value) {
-  if (!palette?.contains(tile)) return;
+function detachForDrag(tile, source, value) {
   const rect = tile.getBoundingClientRect();
-  const replacement = createShapeButton(
+  const replacement = source.kind === "palette" ? createShapeButton(
     tile.dataset.valueId ?? valueId(value),
     tile.getAttribute("aria-label") ?? value,
-    value
-  );
+    value,
+    {
+      kind: "palette"
+    }
+  ) : createPlaceholder();
   tile.replaceWith(replacement);
   tile.dataset.detached = "true";
+  tile.dataset.x = "0";
+  tile.dataset.y = "0";
   tile.style.position = "fixed";
   tile.style.left = `${rect.left}px`;
   tile.style.top = `${rect.top}px`;
@@ -2898,35 +2924,42 @@ function detachFromPalette(tile, value) {
   tile.style.margin = "0";
   tile.style.transform = "";
   document.body.append(tile);
-  wireFreeDragging();
+  if (source.kind === "palette") wireFreeDragging();
 }
-function syncShapeMembership(tile, blockedReplicas = /* @__PURE__ */ new Set()) {
-  const value = readTileValue(tile);
-  if (!value) return;
-  for (const replica of replicas) {
-    const card = replicaCard(replica.id);
-    if (!card) continue;
-    const inside = intersects2(tile, card);
-    const blocked = blockedReplicas.has(replica.id);
-    if (!blocked) {
-      if (inside) replica.set.add(value);
-      else replica.set.delete(value);
-    }
-    card.classList.toggle("has-overlap", inside && !blocked);
-    card.classList.toggle("is-repelling", inside && blocked);
-    updateReplicaCard(replica);
-  }
-  updateStatus();
+function createPlaceholder() {
+  const placeholder = document.createElement("span");
+  placeholder.className = "item-tile item-placeholder";
+  placeholder.setAttribute("aria-hidden", "true");
+  return placeholder;
 }
-function duplicateReplicasFor(tile, value) {
-  const blocked = /* @__PURE__ */ new Set();
-  for (const replica of replicas) {
-    const card = replicaCard(replica.id);
-    if (card && replica.set.has(value) && !intersects2(tile, card)) {
-      blocked.add(replica.id);
-    }
+function markDropTarget(tile, watcher, source, value) {
+  const replicaId = watcher.dataset.replicaId;
+  watcher.classList.remove("is-targeted", "is-repelling");
+  if (replicaId && acceptsDrop(value, source, replicaId)) {
+    watcher.classList.add("is-targeted");
+    return;
   }
-  return blocked;
+  watcher.classList.add("is-repelling");
+  repelFrom(tile, watcher);
+}
+function acceptsDrop(value, source, replicaId) {
+  if (source.kind === "replica") return true;
+  return replicaById(replicaId)?.set.has(value) !== true;
+}
+function applyDrop(value, source, targetReplicaId) {
+  const target = targetReplicaId ? replicaById(targetReplicaId) : void 0;
+  if (source.kind === "palette") {
+    target?.set.add(value);
+    return;
+  }
+  const sourceReplica = replicaById(source.replicaId);
+  if (!target) {
+    sourceReplica?.set.delete(value);
+    return;
+  }
+  if (target.id === source.replicaId) return;
+  target.set.add(value);
+  sourceReplica?.set.delete(value);
 }
 function repelFrom(tile, card) {
   const tileRect = tile.getBoundingClientRect();
@@ -3004,13 +3037,17 @@ function animatePacket(sourceId, targetId, index) {
 }
 function updateReplicaCard(replica) {
   const card = replicaCard(replica.id);
+  if (!card) return;
   const count = card?.querySelector(".replica-count");
   const stats = card?.querySelector(".replica-stats");
+  const members = card?.querySelector(".replica-members");
   const snapshot = replica.set.toJSON();
   if (count) count.textContent = `${replica.set.size} live`;
   if (stats) {
     stats.textContent = `${snapshot.values.length} values / ${snapshot.tombstones.length} tombstones`;
   }
+  if (members) renderReplicaMembers(members, replica);
+  wireFreeDragging();
 }
 function updateStatus() {
   if (!demo) return;
@@ -3040,14 +3077,42 @@ function replicaCard(id) {
     `.replica-card[data-replica-id="${id}"]`
   ) ?? void 0;
 }
-function intersects2(left, right) {
+function replicaById(id) {
+  return replicas.find((replica) => replica.id === id);
+}
+function dropReplicaFor(tile) {
+  return replicaCards().map((card) => ({
+    card,
+    area: overlapArea(tile, card)
+  })).filter((entry) => entry.area > 0).sort((left, right) => right.area - left.area)[0]?.card;
+}
+function overlapArea(left, right) {
   const leftRect = left.getBoundingClientRect();
   const rightRect = right.getBoundingClientRect();
-  return !(leftRect.right < rightRect.left || leftRect.left > rightRect.right || leftRect.bottom < rightRect.top || leftRect.top > rightRect.bottom);
+  const width = Math.max(
+    0,
+    Math.min(leftRect.right, rightRect.right) - Math.max(leftRect.left, rightRect.left)
+  );
+  const height = Math.max(
+    0,
+    Math.min(leftRect.bottom, rightRect.bottom) - Math.max(leftRect.top, rightRect.top)
+  );
+  return width * height;
 }
 function readTileValue(tile) {
   const value = tile.dataset.value;
   return isDemoValue(value) ? value : void 0;
+}
+function readTileSource(tile) {
+  if (tile.dataset.source === "replica" && tile.dataset.replicaId) {
+    return {
+      kind: "replica",
+      replicaId: tile.dataset.replicaId
+    };
+  }
+  return {
+    kind: "palette"
+  };
 }
 function projection(set) {
   return new Set(set.values().map(valueId));

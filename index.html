@@ -273,7 +273,7 @@
       .replica-card {
         position: relative;
         display: grid;
-        grid-template-rows: auto auto;
+        grid-template-rows: auto auto minmax(var(--tile-height), auto);
         gap: 0.55rem;
         min-height: 5.25rem;
         padding: 0.65rem;
@@ -312,6 +312,19 @@
         color: rgba(255, 255, 255, 0.62);
         font-family: 'IBM Plex Mono', 'Cascadia Code', monospace;
         font-size: 0.75rem;
+      }
+
+      .replica-members {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.55rem;
+        min-height: var(--tile-height);
+      }
+
+      .item-placeholder {
+        visibility: hidden;
+        pointer-events: none;
       }
 
       .gossip-packet {
@@ -460,6 +473,9 @@
                   <span class="replica-count">0 live</span>
                 </div>
                 <p class="replica-stats">0 values / 0 tombstones</p>
+                <div class="replica-members" aria-label="replica 1 live values">
+                  <p class="empty">empty</p>
+                </div>
               </section>
               <section
                 class="replica-card"
@@ -471,6 +487,9 @@
                   <span class="replica-count">0 live</span>
                 </div>
                 <p class="replica-stats">0 values / 0 tombstones</p>
+                <div class="replica-members" aria-label="replica 2 live values">
+                  <p class="empty">empty</p>
+                </div>
               </section>
             </section>
           </div>
