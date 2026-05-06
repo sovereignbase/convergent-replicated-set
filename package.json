@@ -73,7 +73,7 @@
     "tsup": "^8.5.1",
     "typedoc": "^0.28.19",
     "typescript": "^5.9.3",
-    "wrangler": "^4.88.0"
+    "wrangler": "4.86.0"
   },
   "repository": {
     "type": "git",
