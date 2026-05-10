@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/sovereignbase/convergent-replicated-set/compare/v1.0.0...v1.0.1) (2026-05-10)
+
+
+### Bug Fixes
+
+* bumb dependencies ([2feb687](https://github.com/sovereignbase/convergent-replicated-set/commit/2feb687c4359ea7bded00038adda37868aa5b858))
+
 ## 1.0.0 (2026-05-06)
 
 
