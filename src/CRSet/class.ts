@@ -25,7 +25,7 @@ import type {
 } from '../.types/types.js'
 
 /**
- * A convergent replicated set. (set = list without duplicates)
+ * A convergent replicated set. (set = unordered list without duplicates)
  *
  * Values are identified by the SHA-256 Base64URL digest of their canonical
  * MessagePack encoding. Local mutations emit `delta` and `change` events;
